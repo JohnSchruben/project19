@@ -7,7 +7,7 @@
 - Blake Shore (QA)
 ---
 ### Project Overview
-Our project is to train an existing LLM on dashcam image data so that the LLM can identify relavent elements in dashcam footage and give driving instructions in real-time. This project is LLM Selfdrive for the OU Mobility Intelligence Lab (MiLa).
+Our project is to train an existing LLM on dashcam image data so that the LLM can identify elements in dashcam footage and give driving instructions in responce to the footage. This project is LLM Selfdrive for the OU Mobility Intelligence Lab (MiLa).
 
 ### Project Objectives
 1. Collect dashcam image data using test vehicles at MiLa.
