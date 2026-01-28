@@ -16,11 +16,13 @@ Our project is to train an existing LLM on dashcam image data so that the LLM ca
 4. Test the trained LLM in vehicle closed course and on-road testing.
 
 ### Technologies Used
-- 
-- 
-- 
+- Python - programming language for development
+- Ollama - open-source tool for running LLMs locally
+- GPT-OSS - OpenAI's open-source LLM for local running
 
 ### Setup Instructions
+1. Download and install the technologies listed above from their sources.
+2. Clone the repo to your local machine.
 
 ### Progress Plan
 
