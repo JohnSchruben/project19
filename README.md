@@ -27,21 +27,22 @@ Our project is to train an existing LLM on dashcam image data so that the LLM ca
 ### Roadmap
 Sprint 1
 - Meet with mentor to receive technical info about how the MiLa self-driving cars work so we know how to program for them. Document info and update roadmap as necessary.
-- Get a local LLM running on our computers.
-- Get dashcam image data using the MiLa test vehicles.
+- Research best LLM for our project.
+- Get the local LLM running on our computers.
+- Get dashcam image data from MiLa. (They have it for us.)
 - Annotate the dashcam image data for scene interpretation.
 
 Sprint 2
 - Build a program for training the LLM on detecting necessary elements in the dashcam images.
-- Train the LLM to detect the elements.
+- Train the LLM to detect the elements. It should output a description of the scene.
 - Test LLM's ability to detect elements correctly.
 
 Sprint 3
-- Build a program for training the LLM on making correct driving instructions as needed by the MiLa vehicles.
-- Train the LLM to make driving instructions in response to dashcam images.
+- Build a program for training the LLM on making correct driving instructions.
+- Train the LLM to make driving instructions in response to dashcam images. It should output a trajectory of where to go and the accelerator, brake, and steering actions needed. (There is no specific format needed.)
 - Test LLM's ability to give correct driving instructions.
 
 Sprint 4
 - Build a program for running the trained LLM with live dashcam footage from the MiLa vehicles.
-- Test the latency of the LLM output and optimize code to reduce it.
+- Test the latency of the LLM output, and optimize code to reduce it.
 - Test the LLM on the MiLa vehicles in closed course and on-road testing.
