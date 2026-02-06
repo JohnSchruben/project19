@@ -1,23 +1,17 @@
-[install-dependencies.py]
-installs dependencies for the scripts, new models will need different dependencies, add them to this file. 
-
-
-
-[runall.py]
-runs every py script that accepts a prompt and an image. all the scripts should have optional args and default args for the prompt and image. 
-
-before running runall.py you have to start the models locally. see individual items below.
-
-# model scripts
-[ollama-test.py]
-# download model https://ollama.com/
-
-# start it
+# ollama is the program that interacts with the models
+# download 
+https://ollama.com/
+# start it, it should start when the pc starts
 ollama serve
 
 # pull in models
-(for llava)
-ollama pull llava 
+python .\install_dependencies.py
 
-(for minicpm-v: ollama-test.py is using this one but can use llava if you edit the .py file)
-pip install ollama pillow
+# run all 
+python .\runall.py
+
+# add new models to 
+models.py
+
+# find new models here 
+https://ollama.com/search
