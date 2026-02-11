@@ -24,7 +24,14 @@ def main():
     # generic test uses: ollama, pillow (and standard libs)
     py_dependencies = [
         "ollama",
-        "pillow"
+        "pillow",
+        "datasets",
+        "transformers",
+        "peft",
+        "bitsandbytes",
+        "trl",
+        "torch",
+        "accelerate"
     ]
 
     print("=== Phase 1: Installing Python Dependencies ===\n")
