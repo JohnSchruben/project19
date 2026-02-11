@@ -24,8 +24,8 @@ def parse_time_from_output(output):
 
 def main():
     parser = argparse.ArgumentParser(description="Run all LLM model tests using ollama-generic.py")
-    parser.add_argument("--image", type=str, default="car-on-road.png", help="Path to the image file to use for all tests")
-    parser.add_argument("--prompt", type=str, help="Prompt text to use for all tests")
+    parser.add_argument("--image", type=str, default="car-on-road-3.jpg", help="Path to the image file to use for all tests")
+    parser.add_argument("--prompt", type=str, default="Describe the traffic situation in this image.", help="Prompt text to use for all tests")
     args = parser.parse_args()
 
     results = []

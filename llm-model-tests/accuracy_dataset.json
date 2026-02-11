@@ -1,0 +1,17 @@
+[
+    {
+        "image": "car-on-road-3.jpg",
+        "prompt": "Describe the objects in this image related to the traffic situation.",
+        "expected_keywords": [
+            "suv",
+            "truck",
+            "car",
+            "road",
+            "street",
+            "intersection",
+            "traffic light",
+            "sign"
+        ],
+        "min_keywords": 2
+    }
+]
