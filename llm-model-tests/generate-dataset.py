@@ -23,7 +23,7 @@ def load_prompt():
         return ""
 
 PROMPT = load_prompt()
-MAX_IMAGES = 10
+PROMPT = load_prompt()
 def encode_image(image_path):
     """Encodes an image to base64, similar to ollama-generic.py but simpler."""
     try:
@@ -51,11 +51,13 @@ def run_generation():
     for pattern in patterns:
         all_images.extend(glob.glob(os.path.join(image_dir_abs, pattern)))
     
-    # Sort and take top 10
+    # Sort
     all_images.sort()
-    selected_images = all_images[:MAX_IMAGES]
-
-    print(f"Found {len(all_images)} images. Processing the first {len(selected_images)}.")
+    
+    # Process ALL images (removed MAX_IMAGES limit)
+    selected_images = all_images
+    
+    print(f"Found {len(all_images)} images. Processing ALL of them.")
 
     results = []
 
@@ -70,22 +72,59 @@ def run_generation():
             response = ollama.generate(
                 model=MODEL_NAME,
                 prompt=PROMPT,
-                images=[img_bytes] 
+                images=[img_bytes],
+                format='json', # Force JSON mode if model supports it (Ollama feature)
+                options={
+                    "temperature": 0.2 # Low temperature for consistent formatting
+                }
             )
             
             response_text = response.get('response', '')
+            print(f"  > Raw response: {response_text[:100]}...") # Debug print
+
+            # Try to parse the JSON
+            # Clean up potential markdown code blocks if the model ignores the instruction
+            cleaned_text = response_text.strip()
+            if cleaned_text.startswith("```json"):
+                cleaned_text = cleaned_text[7:]
+            if cleaned_text.endswith("```"):
+                cleaned_text = cleaned_text[:-3]
+            cleaned_text = cleaned_text.strip()
             
-            results.append({
-                "image": img_name,
-                "result": response_text
-            })
-            print(f"  > Response length: {len(response_text)} chars")
+            try:
+                data = json.loads(cleaned_text)
+                
+                # Ensure all required keys exist, fill with defaults if missing
+                final_entry = {
+                    "image": img_name,
+                    "scene_description": data.get("scene_description", "No description provided"),
+                    "steering_angle_deg": float(data.get("steering_angle_deg", 0.0)),
+                    "throttle": float(data.get("throttle", 0.0)),
+                    "brake": float(data.get("brake", 0.0))
+                }
+                
+                results.append(final_entry)
+                print(f"  > Success.")
+                
+            except json.JSONDecodeError:
+                print(f"  > Failed to parse JSON. Saving raw text as description.")
+                # Fallback: create a dummy entry with the error
+                results.append({
+                    "image": img_name,
+                    "scene_description": f"JSON PARSE ERROR. Raw: {cleaned_text}",
+                    "steering_angle_deg": 0.0,
+                    "throttle": 0.0,
+                    "brake": 0.0
+                })
 
         except Exception as e:
             print(f"  > Error processing {img_name}: {e}")
             results.append({
                 "image": img_name,
-                "result": f"Error: {str(e)}"
+                "scene_description": f"SYSTEM ERROR: {str(e)}",
+                "steering_angle_deg": 0.0,
+                "throttle": 0.0,
+                "brake": 0.0
             })
 
     # Write to JSONL
