@@ -9,6 +9,33 @@ def install_package(package):
     except subprocess.CalledProcessError:
         print(f"Failed to install {package}\n")
 
+def check_ollama_installed():
+    try:
+        subprocess.check_output(["ollama", "--version"], stderr=subprocess.STDOUT)
+        print("Ollama is already installed.")
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
+
+def install_ollama():
+    print("--- Ollama not found. Attempting to install... ---")
+    if sys.platform == "win32":
+        try:
+            print("Attempting to install via winget...")
+            subprocess.check_call(["winget", "install", "-e", "--id", "Ollama.Ollama"])
+            print("Ollama installed successfully. You may need to restart your terminal.")
+        except Exception as e:
+            print(f"Failed to install Ollama via winget: {e}")
+            print("Please download and install Ollama manually from https://ollama.com/download")
+    else:
+        # Linux/Mac fallback (curl)
+        try:
+             print("Attempting to install via curl script...")
+             subprocess.check_call("curl -fsSL https://ollama.com/install.sh | sh", shell=True)
+        except Exception as e:
+            print(f"Failed to install Ollama: {e}")
+            print("Please install manually from https://ollama.com")
+
 def pull_model(model_name):
     print(f"--- Pulling Ollama model: {model_name} ---")
     try:
@@ -20,6 +47,10 @@ def pull_model(model_name):
         print("Error: 'ollama' command not found. Is it installed and in your PATH?\n")
 
 def main():
+    # 0. Check for Ollama binary
+    if not check_ollama_installed():
+        install_ollama()
+
     # 1. Install Python libraries for generic test
     py_dependencies = [
         "ollama",
