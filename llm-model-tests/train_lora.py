@@ -39,45 +39,13 @@ def load_data():
             if line.strip():
                 try:
                     entry = json.loads(line)
-                    prompt_text = """You are analyzing a dashcam image.
-
-Describe ONLY what is clearly visible in the image.
-
-Return your answer EXACTLY in the following structured format.
-Do not add extra sections.
-Do not change the section names.
-If a category is not present, write "None".
-
-1. **Traffic Lights**:
-   - State color (red/yellow/green) and position (left/right/center/background).
-   - If none visible, write: None
-
-2. **Traffic Signs**:
-   - List each visible sign:
-     - Type (stop sign, yield sign, speed limit, pedestrian crossing, no turn, etc.)
-     - Relative position (right side of road, overhead, near intersection, sidewalk left, etc.)
-   - If none visible, write: None
-
-3. **Vehicles**:
-   - Total vehicle count: <number>
-   - List each vehicle as:
-     - Type (car, truck, SUV, bus, motorcycle, etc.)
-     - Relative position (front, left lane, right lane, oncoming, parked right side, behind, etc.)
-
-4. **Pedestrians**:
-   - Total pedestrian count: <number>
-   - For each pedestrian:
-     - Relative position (crosswalk, sidewalk right, near intersection, etc.)
-   - If none visible, write: None
-
-5. **Lane Markings**:
-   - Describe visible lane lines (solid, dashed, double yellow, crosswalk, turn arrows, ONLY markings, etc.)
-   - If none visible, write: None
-
-6. **Hazards / Recommended Action**:
-   - List any immediate hazards (stopped vehicle, pedestrian crossing, red light, obstruction, etc.)
-   - Provide one short recommended driving action (e.g., "Maintain lane", "Prepare to stop", "Yield to pedestrian", "Slow down", "Proceed straight").
-   - If no hazards, write: No immediate hazards. Maintain normal driving."""
+                    prompt_path = os.path.join(base_dir, "driving_prompt.txt")
+                    try:
+                        with open(prompt_path, "r", encoding="utf-8") as prompt_f:
+                            prompt_text = prompt_f.read().strip()
+                    except Exception as e:
+                        print(f"Error loading prompt file: {e}")
+                        continue
                     
                     data.append({
                         "image_path": os.path.join(image_dir_abs, entry["image"]),

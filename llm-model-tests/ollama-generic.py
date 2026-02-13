@@ -5,12 +5,13 @@ from PIL import Image
 import ollama
 import argparse
 import sys
+import re
 
 # --- Tuning knobs (default values) ---
 MAX_DIM = 512 
 JPEG_QUALITY = 70
-NUM_PREDICT = 120 
-NUM_CTX = 1024
+NUM_PREDICT = 1024 
+NUM_CTX = 2048
 TEMPERATURE = 0.2
 
 PROMPT = (
@@ -69,9 +70,9 @@ def main():
     client = ollama.Client()
 
     print(f"--- Running Generic Ollama Test ---")
-    print(f"Model:  {model}")
+    print(f"Directory: Running {model}")
     print(f"Image:  {image_path}")
-    print(f"Prompt: {current_prompt}")
+    # print(f"Prompt: {current_prompt}")
 
     t0 = time.time()
     try:
@@ -96,7 +97,16 @@ def main():
         dt = time.time() - t0
 
         print(f"\n--- response in {dt:.2f}s ---\n")
-        print(resp["response"])
+        response_text = resp["response"]
+        
+        # Post-processing to remove chatty intros
+        # Look for the start of the structured output (e.g., "1. **")
+        match = re.search(r"(1\.\s+\*\*.*)", response_text, re.DOTALL)
+        if match:
+            clean_response = match.group(1)
+            print(clean_response)
+        else:
+            print(response_text)
         
     except ollama.ResponseError as e:
         print(f"Error from Ollama: {e.error}")

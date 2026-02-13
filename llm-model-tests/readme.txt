@@ -1,6 +1,10 @@
 # ollama is the program that interacts with the models
 # download 
 https://ollama.com/
+
+or on linux cli 
+curl -fsSL https://ollama.com/install.sh | sh
+
 # start it, it should start when the pc starts
 ollama serve
 

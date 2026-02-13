@@ -3,6 +3,7 @@ import argparse
 import sys
 import re
 import time
+import os
 
 # List of models to benchmark
 # These are the models you are currently using or testing
@@ -25,8 +26,24 @@ def parse_time_from_output(output):
 def main():
     parser = argparse.ArgumentParser(description="Run all LLM model tests using ollama-generic.py")
     parser.add_argument("--image", type=str, default="car-on-road-3.jpg", help="Path to the image file to use for all tests")
-    parser.add_argument("--prompt", type=str, default="Describe the traffic situation in this image.", help="Prompt text to use for all tests")
+    parser.add_argument("--prompt", type=str, default=None, help="Prompt text to use for all tests")
     args = parser.parse_args()
+
+    current_prompt = args.prompt
+    if current_prompt is None:
+        # Try to load from driving_prompt.txt
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        prompt_path = os.path.join(base_dir, "driving_prompt.txt")
+        if os.path.exists(prompt_path):
+             try:
+                with open(prompt_path, "r", encoding="utf-8") as f:
+                    current_prompt = f.read().strip()
+                print(f"Loaded prompt from {prompt_path}")
+             except Exception as e:
+                print(f"Error loading prompt file: {e}")
+
+    if current_prompt is None:
+        current_prompt = "Describe the traffic situation in this image."
 
     results = []
 
@@ -38,10 +55,10 @@ def main():
         cmd = [sys.executable, "ollama-generic.py", "--model", model]
         
         if args.image:
-            cmd.extend(["--image", args.image])
+             cmd.extend(["--image", args.image])
         
-        if args.prompt:
-            cmd.extend(["--prompt", args.prompt])
+        if current_prompt:
+             cmd.extend(["--prompt", current_prompt])
         
         # We manually time the subprocess as a fallback, but prefer the internal metric
         start_time = time.time()

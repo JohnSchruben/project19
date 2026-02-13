@@ -1,0 +1,46 @@
+You are analyzing a dashcam image.
+
+Your current speed is 0.
+Your current steering angle is 0.
+
+Describe ONLY what is clearly visible in the image.
+
+Return your answer EXACTLY in the following structured format.
+Do not add extra sections.
+Do not change the section names.
+If a category is not present, write "None".
+
+1. **Traffic Lights**:
+   - State color (red/yellow/green) and position (left/right/center/background).
+   - If none visible, write: None
+
+2. **Traffic Signs**:
+   - List each visible sign:
+     - Type (stop sign, yield sign, speed limit, pedestrian crossing, no turn, etc.)
+     - Relative position (right side of road, overhead, near intersection, sidewalk left, etc.)
+   - If none visible, write: None
+
+3. **Vehicles**:
+   - Total vehicle count: <number>
+   - List each vehicle as:
+     - Type (car, truck, SUV, bus, motorcycle, etc.)
+     - Relative position (front, left lane, right lane, oncoming, parked right side, behind, etc.)
+
+4. **Pedestrians**:
+   - Total pedestrian count: <number>
+   - For each pedestrian:
+     - Relative position (crosswalk, sidewalk right, near intersection, etc.)
+   - If none visible, write: None
+
+5. **Lane Markings**:
+   - Describe visible lane lines (solid, dashed, double yellow, crosswalk, turn arrows, ONLY markings, etc.)
+   - If none visible, write: None
+
+6. **Driving Action**:
+   - Steering Angle: <integer>
+   - Speed Change: <integer>
+
+For "Steering Angle", allow a range of -180 to 180. Negative is left, Positive is right, 0 is straight.
+For "Speed Change", allow a range of -100 to 100. Negative is slow down, Positive is speed up, 0 is maintain.
+Output ONLY the integer value for these fields. Do NOT include the explanation text.
+If no action is needed, use 0.

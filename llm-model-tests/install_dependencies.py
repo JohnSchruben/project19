@@ -21,7 +21,6 @@ def pull_model(model_name):
 
 def main():
     # 1. Install Python libraries for generic test
-    # generic test uses: ollama, pillow (and standard libs)
     py_dependencies = [
         "ollama",
         "pillow",
