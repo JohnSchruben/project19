@@ -132,8 +132,15 @@ class DatasetViewer:
         
         # Update Text
         self.text_editor.delete("1.0", tk.END)
-        text_val = item["result"]
-        self.text_editor.insert(tk.END, text_val)
+        
+        if "result" in item:
+            text_val = item["result"]
+            self.text_editor.insert(tk.END, text_val)
+        else:
+            # New format: Display as pretty-printed JSON (excluding image key)
+            display_data = {k: v for k, v in item.items() if k != "image"}
+            text_val = json.dumps(display_data, indent=4)
+            self.text_editor.insert(tk.END, text_val)
 
         # Update Image
         img_filename = item.get("image", "")
@@ -176,7 +183,20 @@ class DatasetViewer:
         
         txt = self.text_editor.get("1.0", tk.END).strip()
         item = self.current_data[self.current_index]
-        item["result"] = txt
+        
+        if "result" in item:
+            item["result"] = txt
+        else:
+            try:
+                # Parse JSON edits
+                new_data = json.loads(txt)
+                if isinstance(new_data, dict):
+                    item.update(new_data)
+                else:
+                    print("Warning: Content must be a JSON object.")
+            except json.JSONDecodeError:
+                print("Warning: Invalid JSON content - changes not saved to memory.")
+
 
     def next_item(self):
         self.save_current_text_to_memory()

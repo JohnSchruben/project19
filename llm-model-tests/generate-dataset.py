@@ -37,12 +37,17 @@ def encode_image(image_path):
         print(f"Failed to load image {image_path}: {e}")
         return None
 
-def run_generation():
+def run_generation(model_name=MODEL_NAME):
     # Resolve absolute path to correspond to run location
     base_dir = os.path.dirname(os.path.abspath(__file__))
     image_dir_abs = os.path.join(base_dir, IMAGE_DIR)
-    output_file_abs = os.path.join(base_dir, OUTPUT_FILE)
+    
+    # Update output file based on model name
+    output_file_name = f"{model_name}-results.jsonl"
+    output_file_path = f"../dataset/{output_file_name}"
+    output_file_abs = os.path.join(base_dir, output_file_path)
 
+    print(f"--- Generating dataset using model: {model_name} ---")
     print(f"Looking for images in: {image_dir_abs}")
     
     # Get all files (jpg, png, jpeg, etc. - assume jpg based on previous listing)
@@ -70,7 +75,7 @@ def run_generation():
                 img_bytes = f.read()
 
             response = ollama.generate(
-                model=MODEL_NAME,
+                model=model_name,
                 prompt=PROMPT,
                 images=[img_bytes],
                 format='json', # Force JSON mode if model supports it (Ollama feature)
@@ -137,9 +142,15 @@ def run_generation():
     print("Done.")
 
 def main():
+    import argparse
     import ollama_utils
+    
+    parser = argparse.ArgumentParser(description="Generate dataset using a specific Ollama model")
+    parser.add_argument("--model", type=str, default=MODEL_NAME, help="The Ollama model to use")
+    args = parser.parse_args()
+    
     with ollama_utils.OllamaService():
-        run_generation()
+        run_generation(args.model)
 
 if __name__ == "__main__":
     main()
