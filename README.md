@@ -56,3 +56,18 @@ Sprint 4
 - Build a program for running the trained LLM with live dashcam footage from the MiLa vehicles.
 - Test the latency of the LLM output, and optimize code to reduce it.
 - Test the LLM on the MiLa vehicles in closed course and on-road testing.
+
+---
+### MiLa Openpilot Data Generation
+
+We have integrated the data generation workflow from [Openpilot_Custom](https://github.com/OUMiLa/Openpilot_Custom). This involves a **Data Capture** step (requires Openpilot on Linux/WSL).
+
+#### 1. Data Capture (on Linux/WSL)
+If you have an Openpilot environment set up:
+1.  Run the setup script to patch your Openpilot installation with the custom `modeld` file:
+    ```bash
+    python setup_openpilot_capture.py /path/to/your/openpilot
+    ```
+2.  Follow the instructions in `Openpilot_Custom/docs/DATA_PREPARATION_GUIDE.md` to run a replay and capture data.
+    - This will generate `segment_XX/raw` (images) and `segment_XX/features` directories.
+

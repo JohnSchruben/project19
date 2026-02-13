@@ -1,0 +1,3 @@
+[submodule "Openpilot_Custom"]
+	path = Openpilot_Custom
+	url = https://github.com/OUMiLa/Openpilot_Custom.git
