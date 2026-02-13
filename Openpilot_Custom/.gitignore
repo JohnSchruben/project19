@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.pyo
+*.so
+.DS_Store
+.vscode/
+.idea/
+data/
+datasets/
+output/
+*.npy
+*.mp4
