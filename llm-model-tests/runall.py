@@ -4,6 +4,7 @@ import sys
 import re
 import time
 import os
+import ollama_utils
 
 # List of models to benchmark
 # These are the models you are currently using or testing
@@ -49,51 +50,52 @@ def main():
 
     print(f"--- Starting Benchmark of {len(MODELS)} Models ---\n")
 
-    for model in MODELS:
-        print(f"Directory: Running {model}...")
-        
-        cmd = [sys.executable, "ollama-generic.py", "--model", model]
-        
-        if args.image:
-             cmd.extend(["--image", args.image])
-        
-        if current_prompt:
-             cmd.extend(["--prompt", current_prompt])
-        
-        # We manually time the subprocess as a fallback, but prefer the internal metric
-        start_time = time.time()
-        
-        try:
-            # Capture output to parse time
-            result = subprocess.run(cmd, capture_output=True, text=True)
+    with ollama_utils.OllamaService():
+        for model in MODELS:
+            print(f"Directory: Running {model}...")
             
-            # Print the output to the console so the user sees progress/results
-            print(result.stdout)
-            if result.stderr:
-                print(result.stderr, file=sys.stderr)
+            cmd = [sys.executable, "ollama-generic.py", "--model", model]
             
-            if result.returncode != 0:
-                print(f"Error running {model}")
-                results.append((model, float('inf')))
-                continue
-
-            # Try to parse the specific response time from the script output
-            duration = parse_time_from_output(result.stdout)
+            if args.image:
+                 cmd.extend(["--image", args.image])
             
-            # Fallback to wall clock if parsing failed
-            if duration is None:
-                duration = time.time() - start_time
+            if current_prompt:
+                 cmd.extend(["--prompt", current_prompt])
+            
+            # We manually time the subprocess as a fallback, but prefer the internal metric
+            start_time = time.time()
+            
+            try:
+                # Capture output to parse time
+                result = subprocess.run(cmd, capture_output=True, text=True)
                 
-            results.append((model, duration))
-            
-        except subprocess.CalledProcessError as e:
-            print(f"Failed to run {model}: {e}")
-            results.append((model, float('inf')))
-        except Exception as e:
-            print(f"An unexpected error occurred while running {model}: {e}")
-            results.append((model, float('inf')))
-            
-        print("-" * 40 + "\n")
+                # Print the output to the console so the user sees progress/results
+                print(result.stdout)
+                if result.stderr:
+                    print(result.stderr, file=sys.stderr)
+                
+                if result.returncode != 0:
+                    print(f"Error running {model}")
+                    results.append((model, float('inf')))
+                    continue
+
+                # Try to parse the specific response time from the script output
+                duration = parse_time_from_output(result.stdout)
+                
+                # Fallback to wall clock if parsing failed
+                if duration is None:
+                    duration = time.time() - start_time
+                    
+                results.append((model, duration))
+                
+            except subprocess.CalledProcessError as e:
+                print(f"Failed to run {model}: {e}")
+                results.append((model, float('inf')))
+            except Exception as e:
+                print(f"An unexpected error occurred while running {model}: {e}")
+                results.append((model, float('inf')))
+                
+            print("-" * 40 + "\n")
 
     # Sort results by duration (fastest first)
     # Inf durations (errors) will be at the end

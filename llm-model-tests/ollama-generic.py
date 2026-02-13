@@ -6,6 +6,7 @@ import ollama
 import argparse
 import sys
 import re
+import ollama_utils
 
 # --- Tuning knobs (default values) ---
 MAX_DIM = 512 
@@ -39,7 +40,7 @@ def load_and_shrink_image(path: str) -> bytes:
 def b64_jpeg_bytes(jpeg_bytes: bytes) -> str:
     return base64.b64encode(jpeg_bytes).decode("utf-8")
 
-def main():
+def run_test():
     # Set up argument parser
     parser = argparse.ArgumentParser(description="Run a generic Ollama test with any model")
     parser.add_argument("--model", type=str, required=True, help="The Ollama model to use (e.g., 'llama3.2', 'phi3.5', 'gemma2')")
@@ -92,26 +93,34 @@ def main():
         if img_b64:
             kwargs["images"] = [img_b64]
 
-        resp = client.generate(**kwargs)
-        
-        dt = time.time() - t0
+        # Use context manager to ensure Ollama is running
+        with ollama_utils.OllamaService():
+            resp = client.generate(**kwargs)
+            
+            dt = time.time() - t0
 
-        print(f"\n--- response in {dt:.2f}s ---\n")
-        response_text = resp["response"]
-        
-        # Post-processing to remove chatty intros
-        # Look for the start of the structured output (e.g., "1. **")
-        match = re.search(r"(1\.\s+\*\*.*)", response_text, re.DOTALL)
-        if match:
-            clean_response = match.group(1)
-            print(clean_response)
-        else:
-            print(response_text)
+            print(f"\n--- response in {dt:.2f}s ---\n")
+            response_text = resp["response"]
+            
+            # Post-processing to remove chatty intros
+            # Look for the start of the structured output (e.g., "1. **")
+            match = re.search(r"(1\.\s+\*\*.*)", response_text, re.DOTALL)
+            if match:
+                clean_response = match.group(1)
+                print(clean_response)
+            else:
+                print(response_text)
         
     except ollama.ResponseError as e:
         print(f"Error from Ollama: {e.error}")
         if e.status_code == 404:
             print(f"Model '{model}' not found. Try running: ollama pull {model}")
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+
+def main():
+    try:
+        run_test()
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
 

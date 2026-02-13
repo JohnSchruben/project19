@@ -1,7 +1,6 @@
 import subprocess
 import sys
-import time
-import urllib.request
+import ollama_utils
 
 def install_package(package):
     print(f"--- Installing python package: {package} ---")
@@ -37,36 +36,6 @@ def install_ollama():
         except Exception as e:
             print(f"Failed to install Ollama: {e}")
             print("Please install manually from https://ollama.com")
-
-def is_ollama_running():
-    try:
-        with urllib.request.urlopen("http://localhost:11434") as response:
-            return response.status == 200
-    except Exception:
-        return False
-
-def start_ollama_service():
-    if is_ollama_running():
-        # print("Ollama is already running check passed.")
-        return
-
-    print("--- Starting Ollama service... ---")
-    try:
-        if sys.platform == "win32":
-            subprocess.Popen(["ollama", "serve"], creationflags=subprocess.CREATE_NEW_CONSOLE)
-        else:
-            subprocess.Popen(["ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        
-        print("Waiting for Ollama to initialize...")
-        for i in range(10):
-            if is_ollama_running():
-                print("Ollama started successfully.\n")
-                return
-            time.sleep(1)
-            
-        print("Warning: Timed out waiting for Ollama to start. Proceeding anyway...\n")
-    except Exception as e:
-        print(f"Failed to start Ollama: {e}\n")
 
 def pull_model(model_name):
     print(f"--- Pulling Ollama model: {model_name} ---")
@@ -111,10 +80,10 @@ def main():
 
     print("=== Phase 2: Pulling Ollama Models ===\n")
     
-    start_ollama_service()
-    
-    for model in models:
-        pull_model(model)
+    # Use context manager to start/stop Ollama if needed
+    with ollama_utils.OllamaService():
+        for model in models:
+            pull_model(model)
     
     print("All dependency checks and model pulls completed.")
 

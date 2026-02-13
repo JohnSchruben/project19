@@ -5,6 +5,7 @@ import argparse
 import subprocess
 import re
 from typing import List, Dict, Tuple
+import ollama_utils
 
 try:
     from models import OLLAMA_VISION_MODELS
@@ -93,66 +94,67 @@ def main():
         log.write(f"Models: {models_to_test}\n")
         log.write(f"Dataset len: {len(dataset)}\n")
 
-    for model in models_to_test:
-        msg = f"Testing Model: {model}"
-        print(msg, flush=True)
-        with open("debug_log.txt", "a") as log:
-            log.write(msg + "\n")
-
-        total_accuracy = 0
-        total_time = 0
-        
-        for case in dataset:
-            image = case.get("image")
-            prompt = case.get("prompt")
-            keywords = case.get("expected_keywords", [])
-            
-            msg = f"  Image: {image}"
-            print(msg)
-            with open("debug_log.txt", "a") as log:
-                log.write(msg + "\n")
-            
-            start_time = time.time()
-            output = run_model(model, image, prompt)
-            duration = time.time() - start_time
-            
-            # Extract the actual response part
-            model_response = parse_model_response(output)
-            
-            accuracy, matched = calculate_accuracy(output, keywords) # Start search on full output just in case
-            
-            msg = f"    Time: {duration:.2f}s"
-            print(msg)
+    with ollama_utils.OllamaService():
+        for model in models_to_test:
+            msg = f"Testing Model: {model}"
+            print(msg, flush=True)
             with open("debug_log.txt", "a") as log:
                 log.write(msg + "\n")
 
-            print("    Output:")
-            # Indent the response for better readability
-            indented_response = "\n".join(["      " + line for line in model_response.splitlines()])
-            print(indented_response)
+            total_accuracy = 0
+            total_time = 0
             
-            with open("debug_log.txt", "a") as log: # encoding='utf-8' might be needed
-                log.write("    Output:\n" + indented_response + "\n")
+            for case in dataset:
+                image = case.get("image")
+                prompt = case.get("prompt")
+                keywords = case.get("expected_keywords", [])
+                
+                msg = f"  Image: {image}"
+                print(msg)
+                with open("debug_log.txt", "a") as log:
+                    log.write(msg + "\n")
+                
+                start_time = time.time()
+                output = run_model(model, image, prompt)
+                duration = time.time() - start_time
+                
+                # Extract the actual response part
+                model_response = parse_model_response(output)
+                
+                accuracy, matched = calculate_accuracy(output, keywords) # Start search on full output just in case
+                
+                msg = f"    Time: {duration:.2f}s"
+                print(msg)
+                with open("debug_log.txt", "a") as log:
+                    log.write(msg + "\n")
 
-            msg = f"    Keywords Matched: {len(matched)}/{len(keywords)} ({accuracy:.1f}%) {matched}"
-            print(msg)
+                print("    Output:")
+                # Indent the response for better readability
+                indented_response = "\n".join(["      " + line for line in model_response.splitlines()])
+                print(indented_response)
+                
+                with open("debug_log.txt", "a") as log: # encoding='utf-8' might be needed
+                    log.write("    Output:\n" + indented_response + "\n")
+
+                msg = f"    Keywords Matched: {len(matched)}/{len(keywords)} ({accuracy:.1f}%) {matched}"
+                print(msg)
+                with open("debug_log.txt", "a") as log:
+                    log.write(msg + "\n")
+                
+                total_accuracy += accuracy
+                total_time += duration
+                
+            avg_accuracy = total_accuracy / len(dataset) if dataset else 0
+            avg_time = total_time / len(dataset) if dataset else 0
+            
+            results.append({
+                "model": model,
+                "accuracy": avg_accuracy,
+                "time": avg_time
+            })
+            print("-" * 40 + "\n")
             with open("debug_log.txt", "a") as log:
-                log.write(msg + "\n")
-            
-            total_accuracy += accuracy
-            total_time += duration
-            
-        avg_accuracy = total_accuracy / len(dataset) if dataset else 0
-        avg_time = total_time / len(dataset) if dataset else 0
-        
-        results.append({
-            "model": model,
-            "accuracy": avg_accuracy,
-            "time": avg_time
-        })
-        print("-" * 40 + "\n")
-        with open("debug_log.txt", "a") as log:
-            log.write("-" * 40 + "\n\n")
+                log.write("-" * 40 + "\n\n")
 
     # Sort results by accuracy (highest first)
     results.sort(key=lambda x: x["accuracy"], reverse=True)

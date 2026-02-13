@@ -37,7 +37,7 @@ def encode_image(image_path):
         print(f"Failed to load image {image_path}: {e}")
         return None
 
-def main():
+def run_generation():
     # Resolve absolute path to correspond to run location
     base_dir = os.path.dirname(os.path.abspath(__file__))
     image_dir_abs = os.path.join(base_dir, IMAGE_DIR)
@@ -96,6 +96,11 @@ def main():
             f.write('\n')
     
     print("Done.")
+
+def main():
+    import ollama_utils
+    with ollama_utils.OllamaService():
+        run_generation()
 
 if __name__ == "__main__":
     main()
