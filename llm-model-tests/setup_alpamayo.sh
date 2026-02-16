@@ -32,6 +32,9 @@ pip install physical_ai_av
 echo "Installing accelerate and transformers (ensure up to date)..."
 pip install --upgrade accelerate transformers
 
+echo "Installing pillow and torch (required for image processing)..."
+pip install pillow torch torchvision
+
 echo "Attempting to install flash-attn (optional but recommended)..."
 pip install flash-attn --no-build-isolation || echo "Warning: flash-attn failed to install. Continuing without it."
 
