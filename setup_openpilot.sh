@@ -27,12 +27,20 @@ if [ $? -ne 0 ]; then
     echo "Error checking out v0.9.8. You might have local changes."
     exit 1
 fi
+
+# Run ubuntu setup script
+echo "Running ubuntu setup script..."
+tools/ubuntu_setup.sh
+if [ $? -ne 0 ]; then
+    echo "Error running ubuntu_setup.sh. Please install dependencies manually."
+    exit 1
+fi
 cd - > /dev/null
 
 # Setup Depth Anything V2
-DEPTH_DIR="Depth-Anything-V2"
+DEPTH_DIR="$OPENPILOT_DIR/DepV2"
 if [ ! -d "$DEPTH_DIR" ]; then
-    echo "Cloning Depth Anything V2..."
+    echo "Cloning Depth Anything V2 into openpilot/DepV2..."
     git clone https://github.com/DepthAnything/Depth-Anything-V2 "$DEPTH_DIR"
     if [ $? -ne 0 ]; then
         echo "Error cloning Depth Anything V2."
@@ -57,6 +65,18 @@ cp "$CUSTOM_MODELD_DIR/modeld_detection_first.py" "$OPENPILOT_DIR/selfdrive/mode
 
 if [ $? -eq 0 ]; then
     echo "Files copied successfully."
+    
+    # Build Openpilot
+    echo "Building Openpilot..."
+    cd "$OPENPILOT_DIR"
+    scons -u -j$(nproc)
+    if [ $? -ne 0 ]; then
+        echo "Error building Openpilot."
+        exit 1
+    fi
+    cd - > /dev/null
+    
+    echo "Setup and Build Complete."
     echo "You can now run the pipeline:"
     echo "  python3 run_pipeline.py"
 else

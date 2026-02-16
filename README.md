@@ -65,6 +65,9 @@ We have integrated the data generation workflow from [Openpilot_Custom](https://
 #### 1. Setup Openpilot (on Linux)
 
 **Prerequisites:**
+- it has to run on ubuntu 
+- you need to install git and pip
+- you need to give the scripts permission to run
 - You must have `project19` in your home directory (e.g., `~/project19`).
 - `openpilot` will be cloned into `~/openpilot` by the setup script.
 
@@ -79,7 +82,7 @@ We have integrated the data generation workflow from [Openpilot_Custom](https://
     ```
     This will:
     - Clone `openpilot` to `~/openpilot` (if it doesn't exist) and checkout `v0.9.8`.
-    - Clone `Depth-Anything-V2` to `~/project19/Depth-Anything-V2` and install dependencies.
+    - Clone `Depth-Anything-V2` to `~/openpilot/DepV2` and install dependencies.
     - Copy the custom `modeld` files into `~/openpilot/selfdrive/modeld/`.
 
 2.  **Setup Openpilot Environment:**

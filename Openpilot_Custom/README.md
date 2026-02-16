@@ -21,33 +21,17 @@ This repo contains **ONLY**:
 
 ## 🚀 Quick Start
 
-### Step 1: Clone openpilot (separately)
+### Step 1: Run the automated setup script
 
-```bash
-cd ~
-git clone https://github.com/commaai/openpilot.git
-cd openpilot
-```
+Please refer to the **[main README](../../README.md)** in the root of `project19`. 
 
-### Step 2: Setup Environment and Build
+We have provided a `setup_openpilot.sh` script that handles:
+- Cloning openpilot
+- Installing dependencies (`ubuntu_setup.sh`)
+- Building openpilot (`scons`)
+- Copying the custom modeld files from this folder
 
-Run the setup script to install dependencies:
-```bash
-tools/ubuntu_setup.sh
-```
-
-Then build openpilot using `scons` (this compiles the replay tool and other necessary binaries):
-```bash
-scons -u -j$(nproc)
-```
-
-### Step 3: Copy the modified files into your openpilot
-
-```bash
-# From this repository, copy the modeld files into your openpilot checkout
-cp Openpilot_Custom/openpilot_files/selfdrive/modeld_detection_second.py ~/openpilot/selfdrive/modeld/
-cp Openpilot_Custom/openpilot_files/selfdrive/modeld_detection_first.py ~/openpilot/selfdrive/modeld/
-```
+**Do not follow the manual steps below unless the script fails.**
 
 **Note:** You can use either `modeld_detection_first.py` or `modeld_detection_second.py`. The second version includes automatic segment management (saves to `segment_00`, `segment_01`, etc.).
 
