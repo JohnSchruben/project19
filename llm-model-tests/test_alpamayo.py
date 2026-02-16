@@ -33,9 +33,11 @@ try:
         original_tie_weights = AlpamayoR1.tie_weights
         
         def safe_tie_weights(self, *args, **kwargs):
-            # Remove the argument that causes the crash
+            # Remove the arguments that cause the crash
             if 'recompute_mapping' in kwargs:
                 kwargs.pop('recompute_mapping')
+            if 'missing_keys' in kwargs:
+                kwargs.pop('missing_keys')
             return original_tie_weights(self, *args, **kwargs)
         
         # Apply the patch to the class
