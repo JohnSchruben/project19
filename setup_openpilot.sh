@@ -52,12 +52,20 @@ if [ $? -ne 0 ]; then
 fi
 
 # Reload profile to ensure uv is in PATH
-if [ -f ~/.profile ]; then
-    source ~/.profile
-fi
 if [ -f ~/.bashrc ]; then
     source ~/.bashrc
 fi
+
+# Pull LFS files (needed for catch2 and others)
+echo "Pulling Git LFS files..."
+cd "$OPENPILOT_DIR"
+git lfs install
+git lfs pull
+if [ $? -ne 0 ]; then
+    echo "Error pulling LFS files."
+    exit 1
+fi
+cd - > /dev/null
 
 cd - > /dev/null
 
