@@ -1,8 +1,10 @@
 import argparse
 import sys
+import os
 import torch
 import numpy as np
 from PIL import Image
+from tqdm import tqdm
 
 # Try importing from the installed alpamayo package or local clone
 try:
@@ -176,8 +178,8 @@ def main():
             
         print(f"Found {len(image_files)} images.")
 
-        for img_path in image_files:
-            print(f"Processing: {img_path}")
+        for img_path in tqdm(image_files, desc="Processing Images"):
+            # print(f"Processing: {img_path}") # tqdm handles progress
             process_image(model, processor, img_path, args.prompt, args.device)
 
     except Exception as e:
