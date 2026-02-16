@@ -42,6 +42,15 @@ if [ $? -ne 0 ]; then
     echo "Error running ubuntu_setup.sh. Please install dependencies manually."
     exit 1
 fi
+
+# Reload profile to ensure uv is in PATH
+if [ -f ~/.profile ]; then
+    source ~/.profile
+fi
+if [ -f ~/.bashrc ]; then
+    source ~/.bashrc
+fi
+
 cd - > /dev/null
 
 # Setup Depth Anything V2
@@ -57,7 +66,11 @@ if [ ! -d "$DEPTH_DIR" ]; then
     # Try to install dependencies
     echo "Installing Depth Anything V2 dependencies..."
     if [ -f "$DEPTH_DIR/requirements.txt" ]; then
-        pip install -r "$DEPTH_DIR/requirements.txt"
+        # Use uv to install into the openpilot environment
+        echo "Installing requirements using uv..."
+        cd "$OPENPILOT_DIR"
+        uv pip install -r "DepV2/requirements.txt"
+        cd - > /dev/null
     else
         echo "WARNING: requirements.txt not found in Depth Anything V2 repo."
     fi
@@ -76,7 +89,8 @@ if [ $? -eq 0 ]; then
     # Build Openpilot
     echo "Building Openpilot..."
     cd "$OPENPILOT_DIR"
-    scons -u -j$(nproc)
+    # Use uv run to execute scons within the environment
+    uv run scons -u -j$(nproc)
     if [ $? -ne 0 ]; then
         echo "Error building Openpilot."
         exit 1
