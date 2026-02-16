@@ -60,14 +60,52 @@ Sprint 4
 ---
 ### MiLa Openpilot Data Generation
 
-We have integrated the data generation workflow from [Openpilot_Custom](https://github.com/OUMiLa/Openpilot_Custom). This involves a **Data Capture** step (requires Openpilot on Linux/WSL).
+We have integrated the data generation workflow from [Openpilot_Custom](https://github.com/OUMiLa/Openpilot_Custom). This involves a **Data Capture** step (requires Openpilot on Linux).
 
-#### 1. Data Capture (on Linux/WSL)
-If you have an Openpilot environment set up:
-1.  Run the setup script to patch your Openpilot installation with the custom `modeld` file:
+#### 1. Setup Openpilot (on Linux)
+
+**Prerequisites:**
+- You must have `project19` in your home directory (e.g., `~/project19`).
+- `openpilot` will be cloned into `~/openpilot` by the setup script.
+
+**Steps:**
+
+1.  **Run Setup Script:**
+    From your `project19` directory, run the setup script:
     ```bash
-    python setup_openpilot_capture.py /path/to/your/openpilot
+    cd ~/project19
+    chmod +x setup_openpilot.sh
+    ./setup_openpilot.sh
     ```
-2.  Follow the instructions in `Openpilot_Custom/docs/DATA_PREPARATION_GUIDE.md` to run a replay and capture data.
-    - This will generate `segment_XX/raw` (images) and `segment_XX/features` directories.
+    This will:
+    - Clone `openpilot` to `~/openpilot` (if it doesn't exist).
+    - Copy the custom `modeld` files into `~/openpilot/selfdrive/modeld/`.
 
+2.  **Setup Openpilot Environment:**
+    Go to the `openpilot` directory and run the ubuntu setup script:
+    ```bash
+    cd ~/openpilot
+    tools/ubuntu_setup.sh
+    ```
+    *Note: You may need to restart your shell or log out/in after this step.*
+
+3.  **Build Openpilot:**
+    Build openpilot using `scons`:
+    ```bash
+    scons -u -j$(nproc)
+    ```
+
+#### 2. Run Data Capture Pipeline
+
+From the `project19` directory, use the pipeline runner script:
+
+```bash
+cd ~/project19
+python3 run_pipeline.py --route "d34c14daa88a1e86/000000ca--7c5d326170"
+```
+
+This will:
+1.  Run the openpilot `replay` tool on the specified route.
+2.  Run the custom `modeld` script to capture images and features to `datasets/`.
+
+See `Openpilot_Custom/docs/DATA_PREPARATION_GUIDE.md` for more details on the data structure and next steps (labeling).

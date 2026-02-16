@@ -206,4 +206,6 @@ orleans.codegen.cs
 
 # Python (since I saw some .py files)
 __pycache__/
-*.py[cod]
+
+# Openpilot datasets
+datasets/

@@ -29,18 +29,29 @@ git clone https://github.com/commaai/openpilot.git
 cd openpilot
 ```
 
-Follow openpilot's setup instructions to get your environment ready.
+### Step 2: Setup Environment and Build
 
-### Step 2: Copy the modified files into your openpilot
+Run the setup script to install dependencies:
+```bash
+tools/ubuntu_setup.sh
+```
+
+Then build openpilot using `scons` (this compiles the replay tool and other necessary binaries):
+```bash
+scons -u -j$(nproc)
+```
+
+### Step 3: Copy the modified files into your openpilot
 
 ```bash
 # From this repository, copy the modeld files into your openpilot checkout
-cp openpilot_files/selfdrive/modeld_detection_second.py ~/openpilot/selfdrive/modeld/
+cp Openpilot_Custom/openpilot_files/selfdrive/modeld_detection_second.py ~/openpilot/selfdrive/modeld/
+cp Openpilot_Custom/openpilot_files/selfdrive/modeld_detection_first.py ~/openpilot/selfdrive/modeld/
 ```
 
 **Note:** You can use either `modeld_detection_first.py` or `modeld_detection_second.py`. The second version includes automatic segment management (saves to `segment_00`, `segment_01`, etc.).
 
-### Step 3: Route Play
+### Step 4: Route Play
 You may use the following public routes for testing:
 
 - `d34c14daa88a1e86/0000013e--0859dd3dcc`
@@ -51,7 +62,7 @@ Run replay using:
 tools/replay/replay d34c14daa88a1e86/0000013e--0859dd3dcc
 
 
-### Step 4: Follow the guide
+### Step 5: Follow the guide
 
 Read **`docs/DATA_PREPARATION_GUIDE.md`** for the complete workflow:
 
