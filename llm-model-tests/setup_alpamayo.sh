@@ -68,8 +68,9 @@ echo "Installing package dependencies manually..."
 # Enforcing numpy<2 due to compatibility issues
 # Enforcing torch>=2.4 as required by newer transformers/alpamayo models
 # Installing transformers from source to get Qwen3VLConfig (likely not in stable release yet)
-pip install "numpy<2" "torch>=2.4.0" "torchvision>=0.19.0" "accelerate>=1.12.0" "av>=16.0.1" "einops>=0.8.1" "hydra-colorlog>=1.2.0" "hydra-core>=1.3.2" "pandas>=2.3.3" "pillow>=12.0.0" "scipy" "tqdm" "matplotlib" --upgrade
-pip install git+https://github.com/huggingface/transformers.git --upgrade 
+# Using python3 -m pip to ensure packages are installed for the correct interpreter
+python3 -m pip install "numpy<2" "torch>=2.4.0" "torchvision>=0.19.0" "accelerate>=1.12.0" "av>=16.0.1" "einops>=0.8.1" "hydra-colorlog>=1.2.0" "hydra-core>=1.3.2" "pandas>=2.3.3" "pillow>=12.0.0" "scipy" "tqdm" "matplotlib" --upgrade
+python3 -m pip install git+https://github.com/huggingface/transformers.git --upgrade 
 
 echo "Attempting to install physical_ai_av (optional/manual)..."
 pip install physical_ai_av || echo "Warning: physical_ai_av failed to install. Proceeding without it." 
