@@ -72,29 +72,10 @@ def safe_cholesky_solve(b, u, *args, **kwargs):
 torch.cholesky_solve = safe_cholesky_solve
 print("Patched torch.cholesky_solve for BFloat16 compatibility.")
 
-def main():
-    parser = argparse.ArgumentParser(description="Test NVIDIA Alpamayo Model")
-    parser.add_argument("--image", type=str, default="car-on-road-3.jpg", help="Path to input image")
-    parser.add_argument("--prompt", type=str, default="Describe this driving situation in detail.", help="Text prompt")
-    parser.add_argument("--model-id", type=str, default="nvidia/Alpamayo-R1-10B", help="Hugging Face Model ID")
-    parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu", help="Device to run on")
-
-    args = parser.parse_args()
-
-    print(f"Loading model: {args.model_id}")
-    print(f"Device: {args.device}")
-
+def process_image(model, processor, image_path, prompt, device, batch_size=1, num_groups=1, hist_len=10):
     try:
-        # Load Model using official class
-        model = AlpamayoR1.from_pretrained(
-            args.model_id, 
-            dtype=torch.bfloat16 if args.device == "cuda" else torch.float32
-        ).to(args.device)
-        
-        processor = helper.get_processor(model.tokenizer)
-
         # Load Image
-        image = Image.open(args.image).convert("RGB")
+        image = Image.open(image_path).convert("RGB")
         
         # Construct message for processor
         messages = [
@@ -102,7 +83,7 @@ def main():
                 "role": "user",
                 "content": [
                     {"type": "image", "image": image},
-                    {"type": "text", "text": args.prompt}
+                    {"type": "text", "text": prompt}
                 ]
             }
         ]
@@ -116,24 +97,12 @@ def main():
             return_tensors="pt",
         )
         
-        # Prepare inputs with dummy history (required by model forward)
-        # Assuming history length of 1 (current frame) or short history.
-        # Based on typical AV models, history might be ~2-10Hz for T seconds.
-        # We'll create a minimal dummy history.
-        
-        # Check model config for history length if possible, or assume a standard shape.
-        # alpamayo usually expects [batch, n_groups, T_hist, 3] for xyz
-        batch_size = 1
-        num_groups = 1
-        hist_len = 10 # reasonable guess, can be adjusted
-        
+        # Prepare inputs with dummy history
         # Shape: (Batch, Num_Groups, Hist_Len, 3)
-        ego_history_xyz = torch.zeros((batch_size, num_groups, hist_len, 3), dtype=model.dtype, device=args.device)
+        ego_history_xyz = torch.zeros((batch_size, num_groups, hist_len, 3), dtype=model.dtype, device=device)
         
         # Shape: (Batch, Num_Groups, Hist_Len, 3, 3)
-        # eye(3) is (3,3). 
-        # Need to repeat to (Batch, Num_Groups, Hist_Len, 3, 3)
-        ego_history_rot = torch.eye(3, dtype=model.dtype, device=args.device).view(1, 1, 1, 3, 3).repeat(batch_size, num_groups, hist_len, 1, 1)
+        ego_history_rot = torch.eye(3, dtype=model.dtype, device=device).view(1, 1, 1, 3, 3).repeat(batch_size, num_groups, hist_len, 1, 1)
 
         model_inputs = {
             "tokenized_data": inputs,
@@ -141,18 +110,14 @@ def main():
             "ego_history_rot": ego_history_rot,
         }
         
-        model_inputs = helper.to_device(model_inputs, args.device)
+        model_inputs = helper.to_device(model_inputs, device)
 
         # Generate
-        print("Generating response...")
-        torch.cuda.manual_seed_all(42)  # For reproducibility
-        
-        # Use autocast to handle mixed precision (required for bfloat16 weights)
-        autocast_dtype = torch.bfloat16 if args.device == "cuda" else torch.float32
+        torch.cuda.manual_seed_all(42)
+        autocast_dtype = torch.bfloat16 if device == "cuda" else torch.float32
         
         with torch.no_grad():
-            with torch.autocast(args.device, dtype=autocast_dtype):
-                # Using the VLM rollout method as in the official script
+            with torch.autocast(device, dtype=autocast_dtype):
                 pred_xyz, pred_rot, extra = model.sample_trajectories_from_data_with_vlm_rollout(
                     data=model_inputs,
                     top_p=0.98,
@@ -162,14 +127,61 @@ def main():
                     return_extra=True,
                 )
 
-        print("\n--- Chain-of-Causation (Reasoning) ---")
-        # extra["cot"] contains the text reasoning
-        print(extra["cot"][0][0]) # [batch, sample] -> text
+        print(f"\n--- Output for {os.path.basename(image_path)} ---")
+        print(extra["cot"][0][0]) 
 
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Error processing {image_path}: {e}")
         import traceback
         traceback.print_exc()
+
+def main():
+    parser = argparse.ArgumentParser(description="Test NVIDIA Alpamayo Model")
+    parser.add_argument("--image", type=str, default="car-on-road-3.jpg", help="Path to input image or directory")
+    parser.add_argument("--prompt", type=str, default="Describe this driving situation in detail.", help="Text prompt")
+    parser.add_argument("--model-id", type=str, default="nvidia/Alpamayo-R1-10B", help="Hugging Face Model ID")
+    parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu", help="Device to run on")
+
+    args = parser.parse_args()
+
+    print(f"Loading model: {args.model_id}")
+    print(f"Device: {args.device}")
+
+    try:
+        # Load Model
+        model = AlpamayoR1.from_pretrained(
+            args.model_id, 
+            dtype=torch.bfloat16 if args.device == "cuda" else torch.float32
+        ).to(args.device)
+        
+        processor = helper.get_processor(model.tokenizer)
+
+        # Determine input images
+        input_path = args.image
+        image_files = []
+        
+        if os.path.isdir(input_path):
+            print(f"Processing directory: {input_path}")
+            # Get common image extensions
+            for root, dirs, files in os.walk(input_path):
+                for file in files:
+                    if file.lower().endswith(('.png', '.jpg', '.jpeg')):
+                        image_files.append(os.path.join(root, file))
+            image_files.sort() # Ensure sequential order
+        elif os.path.isfile(input_path):
+            image_files.append(input_path)
+        else:
+            print(f"Error: Input path '{input_path}' not found.")
+            sys.exit(1)
+            
+        print(f"Found {len(image_files)} images.")
+
+        for img_path in image_files:
+            print(f"Processing: {img_path}")
+            process_image(model, processor, img_path, args.prompt, args.device)
+
+    except Exception as e:
+        print(f"Fatal Error: {e}")
         print("Ensure you have run setup_alpamayo.sh and logged in to Hugging Face.")
 
 if __name__ == "__main__":
