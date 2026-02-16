@@ -107,8 +107,8 @@ if __name__ == "__main__":
                         help="Directory for modeld output (default: ~/project19/datasets/leaf_run)")
     parser.add_argument("--max-segment", type=int, default=12,
                         help="Max segment for modeld (default: 12)")
-    parser.add_argument("--modeld-path", type=str, default="selfdrive/modeld_detection_second.py",
-                        help="Path to modeld script (default: selfdrive/modeld_detection_second.py)")
+    parser.add_argument("--modeld-path", type=str, default="selfdrive/modeld/modeld_detection_second.py",
+                        help="Path to modeld script (default: selfdrive/modeld/modeld_detection_second.py)")
 
     # General arguments
     parser.add_argument("--openpilot-dir", type=str, default="../openpilot",
