@@ -29,3 +29,19 @@ Verify the dataset and images:
 ```bash
 python ../dataset/dataset_viewer.py
 ```
+
+## Performance Benchmarking
+Test real-time performance constraints (20 FPS requirement):
+```bash
+
+# Install benchmark dependencies
+pip instal psutil GPUtil
+
+# Run benchmark on all models
+python benchmark.py
+
+# Run automated performance tests (fails if more than 50ms latency)
+python test_performance.py
+```
+
+Restults saved to 'benchmarks/' folder
