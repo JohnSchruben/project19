@@ -18,6 +18,38 @@ else
     echo "Found openpilot directory at $OPENPILOT_DIR"
 fi
 
+# Checkout v0.9.8
+echo "Checking out openpilot v0.9.8..."
+cd "$OPENPILOT_DIR"
+git fetch --tags
+git checkout v0.9.8
+if [ $? -ne 0 ]; then
+    echo "Error checking out v0.9.8. You might have local changes."
+    exit 1
+fi
+cd - > /dev/null
+
+# Setup Depth Anything V2
+DEPTH_DIR="Depth-Anything-V2"
+if [ ! -d "$DEPTH_DIR" ]; then
+    echo "Cloning Depth Anything V2..."
+    git clone https://github.com/DepthAnything/Depth-Anything-V2 "$DEPTH_DIR"
+    if [ $? -ne 0 ]; then
+        echo "Error cloning Depth Anything V2."
+        exit 1
+    fi
+    
+    # Try to install dependencies
+    echo "Installing Depth Anything V2 dependencies..."
+    if [ -f "$DEPTH_DIR/requirements.txt" ]; then
+        pip install -r "$DEPTH_DIR/requirements.txt"
+    else
+        echo "WARNING: requirements.txt not found in Depth Anything V2 repo."
+    fi
+else
+    echo "Depth Anything V2 directory already exists."
+fi
+
 # Copy files
 echo "Copying custom modeld files..."
 cp "$CUSTOM_MODELD_DIR/modeld_detection_second.py" "$OPENPILOT_DIR/selfdrive/modeld/"

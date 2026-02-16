@@ -78,7 +78,8 @@ We have integrated the data generation workflow from [Openpilot_Custom](https://
     ./setup_openpilot.sh
     ```
     This will:
-    - Clone `openpilot` to `~/openpilot` (if it doesn't exist).
+    - Clone `openpilot` to `~/openpilot` (if it doesn't exist) and checkout `v0.9.8`.
+    - Clone `Depth-Anything-V2` to `~/project19/Depth-Anything-V2` and install dependencies.
     - Copy the custom `modeld` files into `~/openpilot/selfdrive/modeld/`.
 
 2.  **Setup Openpilot Environment:**
@@ -92,6 +93,8 @@ We have integrated the data generation workflow from [Openpilot_Custom](https://
 3.  **Build Openpilot:**
     Build openpilot using `scons`:
     ```bash
+    # Ensure you are back in the openpilot directory
+    cd ~/openpilot
     scons -u -j$(nproc)
     ```
 
