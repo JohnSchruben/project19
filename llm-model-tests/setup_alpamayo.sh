@@ -65,9 +65,10 @@ fi
 
 echo "Installing package dependencies manually..."
 # Dependencies from pyproject.toml
-# Enforcing numpy<2 due to compatibility issues with current torch/transformers stack
-# Enforcing transformers>=4.57.1 as required by Alpamayo (for Qwen3VL support)
-pip install "numpy<2" "transformers>=4.57.1" "accelerate>=1.12.0" "av>=16.0.1" "einops>=0.8.1" "hydra-colorlog>=1.2.0" "hydra-core>=1.3.2" "pandas>=2.3.3" "pillow>=12.0.0" "scipy" "tqdm" "matplotlib" --upgrade 
+# Enforcing numpy<2 due to compatibility issues
+# Enforcing torch>=2.4 as required by newer transformers/alpamayo models
+# Enforcing transformers (latest) to ensure Qwen/Alpamayo support
+pip install "numpy<2" "torch>=2.4.0" "torchvision>=0.19.0" "transformers" "accelerate>=1.12.0" "av>=16.0.1" "einops>=0.8.1" "hydra-colorlog>=1.2.0" "hydra-core>=1.3.2" "pandas>=2.3.3" "pillow>=12.0.0" "scipy" "tqdm" "matplotlib" --upgrade 
 
 echo "Attempting to install physical_ai_av (optional/manual)..."
 pip install physical_ai_av || echo "Warning: physical_ai_av failed to install. Proceeding without it." 
