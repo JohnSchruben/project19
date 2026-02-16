@@ -96,12 +96,18 @@ def main():
         # We'll create a minimal dummy history.
         
         # Check model config for history length if possible, or assume a standard shape.
-        # alpamayo usually expects [batch, T_hist, 3] for xyz
+        # alpamayo usually expects [batch, n_groups, T_hist, 3] for xyz
         batch_size = 1
+        num_groups = 1
         hist_len = 10 # reasonable guess, can be adjusted
         
-        ego_history_xyz = torch.zeros((batch_size, hist_len, 3), dtype=model.dtype, device=args.device)
-        ego_history_rot = torch.eye(3, dtype=model.dtype, device=args.device).unsqueeze(0).unsqueeze(0).repeat(batch_size, hist_len, 1, 1)
+        # Shape: (Batch, Num_Groups, Hist_Len, 3)
+        ego_history_xyz = torch.zeros((batch_size, num_groups, hist_len, 3), dtype=model.dtype, device=args.device)
+        
+        # Shape: (Batch, Num_Groups, Hist_Len, 3, 3)
+        # eye(3) is (3,3). 
+        # Need to repeat to (Batch, Num_Groups, Hist_Len, 3, 3)
+        ego_history_rot = torch.eye(3, dtype=model.dtype, device=args.device).view(1, 1, 1, 3, 3).repeat(batch_size, num_groups, hist_len, 1, 1)
 
         model_inputs = {
             "tokenized_data": inputs,
