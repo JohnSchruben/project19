@@ -26,6 +26,24 @@ except ImportError:
         print("Please run ./setup_alpamayo.sh to clone the repository.")
         sys.exit(1)
 
+# Monkey-patch to fix 'tie_weights' compatibility issue with newer transformers
+# Newer transformers call tie_weights(recompute_mapping=False), which ReasoningVLA might not accept.
+try:
+    if hasattr(AlpamayoR1, 'tie_weights'):
+        original_tie_weights = AlpamayoR1.tie_weights
+        
+        def safe_tie_weights(self, *args, **kwargs):
+            # Remove the argument that causes the crash
+            if 'recompute_mapping' in kwargs:
+                kwargs.pop('recompute_mapping')
+            return original_tie_weights(self, *args, **kwargs)
+        
+        # Apply the patch to the class
+        AlpamayoR1.tie_weights = safe_tie_weights
+        print("Patched AlpamayoR1.tie_weights for compatibility.")
+except Exception as e:
+    print(f"Warning: Failed to patch tie_weights: {e}")
+
 def main():
     parser = argparse.ArgumentParser(description="Test NVIDIA Alpamayo Model")
     parser.add_argument("--image", type=str, default="car-on-road-3.jpg", help="Path to input image")
