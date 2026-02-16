@@ -119,16 +119,22 @@ def main():
 
         # Generate
         print("Generating response...")
+        torch.cuda.manual_seed_all(42)  # For reproducibility
+        
+        # Use autocast to handle mixed precision (required for bfloat16 weights)
+        autocast_dtype = torch.bfloat16 if args.device == "cuda" else torch.float32
+        
         with torch.no_grad():
-            # Using the VLM rollout method as in the official script
-            pred_xyz, pred_rot, extra = model.sample_trajectories_from_data_with_vlm_rollout(
-                data=model_inputs,
-                top_p=0.98,
-                temperature=0.6,
-                num_traj_samples=1, 
-                max_generation_length=512,
-                return_extra=True,
-            )
+            with torch.autocast(args.device, dtype=autocast_dtype):
+                # Using the VLM rollout method as in the official script
+                pred_xyz, pred_rot, extra = model.sample_trajectories_from_data_with_vlm_rollout(
+                    data=model_inputs,
+                    top_p=0.98,
+                    temperature=0.6,
+                    num_traj_samples=1, 
+                    max_generation_length=512,
+                    return_extra=True,
+                )
 
         print("\n--- Chain-of-Causation (Reasoning) ---")
         # extra["cot"] contains the text reasoning
