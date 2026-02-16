@@ -50,14 +50,7 @@ def main():
         # Load Image
         image = Image.open(args.image).convert("RGB")
         
-        # Prepare inputs using Alpamayo helper structure
-        # The helper expects 'messages' which usually contain image/text.
-        # Based on typical VLA usage, we construct a simple message.
-        # Note: 'helper.create_message' in the repo takes flattened image frames.
-        # We need to see how it handles a single image.
-        # Assuming simple chat template structure for now as fallback if helper is complex.
-        
-        # Construct a standardized message
+        # Construct message for processor
         messages = [
             {
                 "role": "user",
@@ -76,24 +69,49 @@ def main():
             return_dict=True,
             return_tensors="pt",
         )
-        inputs = {k: v.to(model.device) for k, v in inputs.items()}
+        
+        # Prepare inputs with dummy history (required by model forward)
+        # Assuming history length of 1 (current frame) or short history.
+        # Based on typical AV models, history might be ~2-10Hz for T seconds.
+        # We'll create a minimal dummy history.
+        
+        # Check model config for history length if possible, or assume a standard shape.
+        # alpamayo usually expects [batch, T_hist, 3] for xyz
+        batch_size = 1
+        hist_len = 10 # reasonable guess, can be adjusted
+        
+        ego_history_xyz = torch.zeros((batch_size, hist_len, 3), dtype=model.dtype, device=args.device)
+        ego_history_rot = torch.eye(3, dtype=model.dtype, device=args.device).unsqueeze(0).unsqueeze(0).repeat(batch_size, hist_len, 1, 1)
+
+        model_inputs = {
+            "tokenized_data": inputs,
+            "ego_history_xyz": ego_history_xyz,
+            "ego_history_rot": ego_history_rot,
+        }
+        
+        model_inputs = helper.to_device(model_inputs, args.device)
 
         # Generate
         print("Generating response...")
         with torch.no_grad():
-            generated_ids = model.generate(
-                **inputs, 
-                max_new_tokens=500,
-                do_sample=False
+            # Using the VLM rollout method as in the official script
+            pred_xyz, pred_rot, extra = model.sample_trajectories_from_data_with_vlm_rollout(
+                data=model_inputs,
+                top_p=0.98,
+                temperature=0.6,
+                num_traj_samples=1, 
+                max_generation_length=512,
+                return_extra=True,
             )
 
-        # Decode
-        generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-        print("\n--- Output ---")
-        print(generated_text)
+        print("\n--- Chain-of-Causation (Reasoning) ---")
+        # extra["cot"] contains the text reasoning
+        print(extra["cot"][0][0]) # [batch, sample] -> text
 
     except Exception as e:
         print(f"Error: {e}")
+        import traceback
+        traceback.print_exc()
         print("Ensure you have run setup_alpamayo.sh and logged in to Hugging Face.")
 
 if __name__ == "__main__":
