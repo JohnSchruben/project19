@@ -6,6 +6,9 @@ PROJECT_ROOT=$(pwd)
 OPENPILOT_DIR="../openpilot"
 CUSTOM_MODELD_DIR="Openpilot_Custom/openpilot_files/selfdrive"
 
+# Ensure .local/bin is in PATH for uv
+export PATH="$HOME/.local/bin:$PATH"
+
 # Check if openpilot directory exists
 if [ ! -d "$OPENPILOT_DIR" ]; then
     echo "Openpilot directory not found at $OPENPILOT_DIR"
