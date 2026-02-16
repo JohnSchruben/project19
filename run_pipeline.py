@@ -16,7 +16,7 @@ def get_terminal_cmd(cmd_list, env, block=False):
     Returns (terminal_cmd_list, is_blocking)
     """
     # Convert command list to string for shell execution
-    env_str = " ".join([f"{k}={v}" for k, v in env.items() if k.startswith("MODELD_") or k == "PYTHONPATH"])
+    env_str = " ".join([f"{k}={v}" for k, v in env.items() if k.startswith("MODELD_") or k == "PYTHONPATH" or k == "PATH"])
     cmd_str = f"{env_str} {' '.join(cmd_list)}"
     
     # Common terminal emulators
@@ -51,12 +51,10 @@ def run_pipeline(args):
     Runs the Openpilot replay tool and modeld detection script concurrently.
     """
     
-    # Hardcoded configuration (formerly general args)
-    openpilot_dir_str = "../openpilot"
-    python_cmd = None
-    new_terminal_modeld = True
-    new_terminal_replay = False
-    dry_run = False
+    # Ensure .local/bin is in PATH for uv detection
+    local_bin = os.path.expanduser("~/.local/bin")
+    if local_bin not in os.environ["PATH"]:
+        os.environ["PATH"] = f"{local_bin}:{os.environ['PATH']}"
 
     # Resolve openpilot directory
     op_dir = Path(openpilot_dir_str).resolve()
@@ -107,7 +105,16 @@ def run_pipeline(args):
             cmd.extend(["pipenv", "run", "python3"])
         elif (op_dir / "uv.lock").exists():
             print("Detected uv environment.")
-            cmd.extend(["uv", "run", "python3"])
+            
+            # Find uv
+            uv_path = shutil.which("uv")
+            if not uv_path:
+                print("WARNING: uv not found in PATH via shutil.which even after updating PATH.")
+                print(f"PATH is: {os.environ['PATH']}")
+                uv_path = "uv" # Fallback
+            
+            print(f"Using uv at: {uv_path}")
+            cmd.extend([uv_path, "run", "python3"])
         else:
             venv_python = op_dir / "venv" / "bin" / "python3"
             if venv_python.exists():
