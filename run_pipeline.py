@@ -209,8 +209,8 @@ if __name__ == "__main__":
     
     parser.add_argument("--route", type=str, default="d34c14daa88a1e86/000000ca--7c5d326170",
                         help="Route ID (default: 'd34c14daa88a1e86/000000ca--7c5d326170')")
-    parser.add_argument("--replay-flags", type=str, default="--dcamera --ecamera --no-vipc",
-                        help="Flags for replay (default: --dcamera --ecamera --no-vipc)")
+    parser.add_argument("--replay-flags", type=str, default="",
+                        help="Flags for replay (default: '')")
     parser.add_argument("--replay-path", type=str, default="./tools/replay/replay",
                         help="Path to replay executable (default: ./tools/replay/replay)")
 
