@@ -63,12 +63,19 @@ else
     cd alpamayo && git pull && cd ..
 fi
 
-echo "Installing alpamayo package..."
-pip install -e alpamayo
+echo "Installing package dependencies manually (skipping 'pip install -e alpamayo' due to build issues)..."
+# Dependencies from pyproject.toml
+pip install "accelerate>=1.12.0" "av>=16.0.1" "einops>=0.8.1" "hydra-colorlog>=1.2.0" "hydra-core>=1.3.2" "pandas>=2.3.3" "physical_ai_av>=0.1.0" "pillow>=12.0.0" "torch" "torchvision" "transformers" 
 
 echo "Downloading NVIDIA Alpamayo-R1-10B model..."
 # Explicitly download the model (snapshot) to the cache
 hf download nvidia/Alpamayo-R1-10B --exclude "*.bin"
+
+echo ""
+echo "Setup complete."
+echo "Since we skipped installing the package globally, 'test_alpamayo.py' handles the path."
+echo "You can now run the test script:"
+echo "python3 test_alpamayo.py --image <path_to_image>"
 
 echo ""
 echo "Setup complete. The model has been downloaded."

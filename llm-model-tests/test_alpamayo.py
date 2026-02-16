@@ -4,14 +4,27 @@ import torch
 import numpy as np
 from PIL import Image
 
-# Try importing from the installed alpamayo package
+# Try importing from the installed alpamayo package or local clone
 try:
     from alpamayo_r1.models.alpamayo_r1 import AlpamayoR1
     from alpamayo_r1 import helper
 except ImportError:
-    print("Error: alpamayo_r1 package not found.")
-    print("Please run ./setup_alpamayo.sh to clone and install the repository.")
-    sys.exit(1)
+    # Fallback: check if local 'alpamayo/src' exists and add to path
+    import os
+    local_src = os.path.join(os.path.dirname(__file__), "alpamayo", "src")
+    if os.path.exists(local_src):
+        print(f"Adding local source to path: {local_src}")
+        sys.path.append(local_src)
+        try:
+            from alpamayo_r1.models.alpamayo_r1 import AlpamayoR1
+            from alpamayo_r1 import helper
+        except ImportError as e:
+            print(f"Error importing from local source: {e}")
+            sys.exit(1)
+    else:
+        print("Error: alpamayo_r1 package not found and local 'alpamayo/src' not found.")
+        print("Please run ./setup_alpamayo.sh to clone the repository.")
+        sys.exit(1)
 
 def main():
     parser = argparse.ArgumentParser(description="Test NVIDIA Alpamayo Model")
