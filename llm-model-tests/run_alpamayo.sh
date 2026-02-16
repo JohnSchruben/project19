@@ -2,34 +2,49 @@
 # Wrapper to run test_alpamayo.py using the python interpreter associated with the active 'pip'
 # This fixes issues where 'python3' points to system python while 'pip' points to a venv.
 
-PIP_EXE=$(command -v pip)
-PYTHON_EXE=$(command -v python3)
+# Wrapper to run test_alpamayo.py using the correct python environment
+# Priority:
+# 1. uv run (if available and configured)
+# 2. Python associated with the active 'pip'
+# 3. System python3
 
-echo "Resolved pip: $PIP_EXE"
-echo "Resolved python3: $PYTHON_EXE"
+echo "Detecting Python environment..."
 
-# Check if pip and python are in the same directory
-DIR_PIP=$(dirname "$PIP_EXE")
-DIR_PY=$(dirname "$PYTHON_EXE")
-
-TARGET_PYTHON="$PYTHON_EXE"
-
-if [ "$DIR_PIP" != "$DIR_PY" ]; then
-    echo "Warning: pip and python3 are in different directories."
-    echo "Attempting to use python from pip's directory: $DIR_PIP"
-    
-    if [ -x "$DIR_PIP/python3" ]; then
-        TARGET_PYTHON="$DIR_PIP/python3"
-        echo "Found: $TARGET_PYTHON"
-    elif [ -x "$DIR_PIP/python" ]; then
-        TARGET_PYTHON="$DIR_PIP/python"
-        echo "Found: $TARGET_PYTHON"
+# 1. Try uv run
+if command -v uv &> /dev/null; then
+    echo "Found 'uv'. Attempting to run with 'uv run'..."
+    uv run python test_alpamayo.py "$@"
+    EXIT_CODE=$?
+    if [ $EXIT_CODE -eq 0 ]; then
+        exit 0
     else
-        echo "Could not find python exe in pip directory. Getting sys.executable from pip..."
-        # Fallback: ask pip which python it uses (if possible) or just try running module
-        # Running pip -V usually implies the python version/path
+        echo "'uv run' failed or exited with error. Trying fallback method..."
     fi
 fi
 
-echo "Running test with: $TARGET_PYTHON"
-"$TARGET_PYTHON" test_alpamayo.py "$@"
+# 2. Try Python associated with pip
+PIP_EXE=$(command -v pip)
+if [ -n "$PIP_EXE" ]; then
+    DIR_PIP=$(dirname "$PIP_EXE")
+    # Try finding python in same dir
+    if [ -x "$DIR_PIP/python3" ]; then
+        CANDIDATE="$DIR_PIP/python3"
+    elif [ -x "$DIR_PIP/python" ]; then
+        CANDIDATE="$DIR_PIP/python"
+    fi
+    
+    if [ -n "$CANDIDATE" ]; then
+        echo "Checking candidate: $CANDIDATE"
+        if "$CANDIDATE" -c "import torch" &> /dev/null; then
+            echo "Success! $CANDIDATE has torch installed."
+            "$CANDIDATE" test_alpamayo.py "$@"
+            exit $?
+        else
+            echo "Candidate $CANDIDATE missing torch."
+        fi
+    fi
+fi
+
+# 3. Last ditch: python3
+echo "Falling back to system python3..."
+python3 test_alpamayo.py "$@"
