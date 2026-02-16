@@ -28,6 +28,14 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+# Initialize submodules
+echo "Initializing submodules..."
+git submodule update --init --recursive
+if [ $? -ne 0 ]; then
+    echo "Error initializing submodules."
+    exit 1
+fi
+
 # Fix metadrive-simulator hash mismatch in uv.lock
 # The upstream package hash changed, causing uv sync to fail. We patch it with the new hash.
 echo "Patching uv.lock for metadrive-simulator..."

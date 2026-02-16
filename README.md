@@ -67,7 +67,6 @@ We have integrated the data generation workflow from [Openpilot_Custom](https://
 **Prerequisites:**
 - it has to run on ubuntu 
 - you need to install git and pip
-- you need to give the scripts permission to run
 - You must have `project19` in your home directory (e.g., `~/project19`).
 - `openpilot` will be cloned into `~/openpilot` by the setup script.
 
