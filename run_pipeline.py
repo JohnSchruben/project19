@@ -233,10 +233,8 @@ if __name__ == "__main__":
                         help="Open modeld in a new terminal window to avoid output interleaving (default: True)")
     parser.add_argument("--no-new-terminal", action="store_false", dest="new_terminal",
                         help="Run modeld in the same terminal (background)")
-    parser.add_argument("--replay-new-terminal", action="store_true", default=True,
-                        help="Open replay tool in a new terminal window (default: True)")
-    parser.add_argument("--no-replay-new-terminal", action="store_false", dest="replay_new_terminal",
-                        help="Run replay in the same terminal")
+    parser.add_argument("--replay-new-terminal", action="store_true", default=False,
+                        help="Open replay tool in a new terminal window (default: False)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Print commands without executing them")
     
