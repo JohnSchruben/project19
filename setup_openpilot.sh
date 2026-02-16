@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # Define paths
-# Assumes this script is run from project19 root and openpilot is .../openpilot
+# Assumes this script is run from project19 root
+PROJECT_ROOT=$(pwd)
 OPENPILOT_DIR="../openpilot"
 CUSTOM_MODELD_DIR="Openpilot_Custom/openpilot_files/selfdrive"
 
@@ -57,17 +58,19 @@ if [ -f ~/.bashrc ]; then
 fi
 
 # Pull LFS files (needed for catch2 and others)
+# Pull LFS files (needed for catch2 and others)
 echo "Pulling Git LFS files..."
-cd "$OPENPILOT_DIR"
+# We are already in openpilot directory from line 23
 git lfs install
 git lfs pull
 if [ $? -ne 0 ]; then
     echo "Error pulling LFS files."
     exit 1
 fi
-cd - > /dev/null
 
-cd - > /dev/null
+# Return to project root to find custom files
+echo "Returning to project root: $PROJECT_ROOT"
+cd "$PROJECT_ROOT"
 
 # Setup Depth Anything V2
 DEPTH_DIR="$OPENPILOT_DIR/DepV2"
@@ -86,7 +89,7 @@ if [ ! -d "$DEPTH_DIR" ]; then
         echo "Installing requirements using uv..."
         cd "$OPENPILOT_DIR"
         uv pip install -r "DepV2/requirements.txt"
-        cd - > /dev/null
+        cd "$PROJECT_ROOT"
     else
         echo "WARNING: requirements.txt not found in Depth Anything V2 repo."
     fi
@@ -111,7 +114,7 @@ if [ $? -eq 0 ]; then
         echo "Error building Openpilot."
         exit 1
     fi
-    cd - > /dev/null
+    # No need to cd back, script is ending
     
     echo "Setup and Build Complete."
     echo "You can now run the pipeline:"
