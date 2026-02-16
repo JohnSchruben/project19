@@ -1,8 +1,17 @@
 import argparse
 import sys
 import torch
+import numpy as np
 from PIL import Image
-from transformers import AutoModelForCausalLM, AutoProcessor
+
+# Try importing from the installed alpamayo package
+try:
+    from alpamayo_r1.models.alpamayo_r1 import AlpamayoR1
+    from alpamayo_r1 import helper
+except ImportError:
+    print("Error: alpamayo_r1 package not found.")
+    print("Please run ./setup_alpamayo.sh to clone and install the repository.")
+    sys.exit(1)
 
 def main():
     parser = argparse.ArgumentParser(description="Test NVIDIA Alpamayo Model")
@@ -17,27 +26,43 @@ def main():
     print(f"Device: {args.device}")
 
     try:
-        # Load Processor and Model
-        processor = AutoProcessor.from_pretrained(args.model_id, trust_remote_code=True)
-        model = AutoModelForCausalLM.from_pretrained(
+        # Load Model using official class
+        model = AlpamayoR1.from_pretrained(
             args.model_id, 
-            trust_remote_code=True, 
-            torch_dtype=torch.float16 if args.device == "cuda" else torch.float32,
-            device_map="auto" if args.device == "cuda" else None
-        )
+            dtype=torch.bfloat16 if args.device == "cuda" else torch.float32
+        ).to(args.device)
         
-        if args.device != "cuda" and model.device.type != "cuda":
-             model.to(args.device)
+        processor = helper.get_processor(model.tokenizer)
 
         # Load Image
         image = Image.open(args.image).convert("RGB")
-
-        # Prepare inputs
-        # Note: Exact prompt format depends on the model. Assuming standard chat template or simple text.
-        # Alpamayo might use specific tokens. For now, we use a simple format.
-        text = f"<image>\n{args.prompt}" 
         
-        inputs = processor(text=[text], images=[image], return_tensors="pt")
+        # Prepare inputs using Alpamayo helper structure
+        # The helper expects 'messages' which usually contain image/text.
+        # Based on typical VLA usage, we construct a simple message.
+        # Note: 'helper.create_message' in the repo takes flattened image frames.
+        # We need to see how it handles a single image.
+        # Assuming simple chat template structure for now as fallback if helper is complex.
+        
+        # Construct a standardized message
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "image": image},
+                    {"type": "text", "text": args.prompt}
+                ]
+            }
+        ]
+
+        # Use processor to format
+        inputs = processor.apply_chat_template(
+            messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt",
+        )
         inputs = {k: v.to(model.device) for k, v in inputs.items()}
 
         # Generate
@@ -56,7 +81,7 @@ def main():
 
     except Exception as e:
         print(f"Error: {e}")
-        print("Note: You may need to log in to Hugging Face (`huggingface-cli login`) to access this model.")
+        print("Ensure you have run setup_alpamayo.sh and logged in to Hugging Face.")
 
 if __name__ == "__main__":
     main()

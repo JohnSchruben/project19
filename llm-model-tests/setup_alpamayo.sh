@@ -47,13 +47,24 @@ fi
 # Check if token is provided as argument
 if [ -n "$1" ]; then
     echo "Logging in with provided token..."
-    hf login --token "$1"
+    hf auth login --token "$1"
 else
     echo "Please log in to Hugging Face to access the model."
     echo "You will need an access token from https://huggingface.co/settings/tokens"
     echo "Usage: ./setup_alpamayo.sh [HF_TOKEN] to avoid interactive login."
-    hf login
+    hf auth login
 fi
+
+echo "Cloning Alpamayo repository..."
+if [ ! -d "alpamayo" ]; then
+    git clone https://github.com/NVlabs/alpamayo.git
+else
+    echo "alpamayo directory already exists. Pulling latest..."
+    cd alpamayo && git pull && cd ..
+fi
+
+echo "Installing alpamayo package..."
+pip install -e alpamayo
 
 echo "Downloading NVIDIA Alpamayo-R1-10B model..."
 # Explicitly download the model (snapshot) to the cache
