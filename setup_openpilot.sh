@@ -55,6 +55,14 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+# Install OpenCL support for VM (pocl)
+echo "Installing OpenCL support (pocl)..."
+sudo apt-get update
+sudo apt-get install -y pocl-opencl-icd clinfo
+if [ $? -ne 0 ]; then
+    echo "Warning: Failed to install OpenCL. You might need to install 'pocl-opencl-icd' manually."
+fi
+
 # Reload profile to ensure uv is in PATH
 if [ -f ~/.bashrc ]; then
     source ~/.bashrc
