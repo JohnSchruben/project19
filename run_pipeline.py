@@ -7,6 +7,40 @@ import sys
 import time
 from pathlib import Path
 
+def get_modeld_cmd(op_dir, modeld_path, args):
+    """
+    Constructs the modeld command, attempting to detect the environment runner.
+    """
+    cmd = []
+    
+    # Check if user specified a python command wrapper
+    if args.python_cmd:
+        cmd.extend(args.python_cmd.split())
+    else:
+        # Auto-detect environment
+        if (op_dir / "poetry.lock").exists():
+            print("Detected poetry environment.")
+            cmd.extend(["poetry", "run", "python3"])
+        elif (op_dir / "Pipfile").exists():
+            print("Detected pipenv environment.")
+            cmd.extend(["pipenv", "run", "python3"])
+        elif (op_dir / "uv.lock").exists():
+            print("Detected uv environment.")
+            cmd.extend(["uv", "run", "python3"])
+        else:
+            # Default to system python3
+            # If inside a venv (virtualenv), python3 should work if activated.
+            # If not activated, we might be able to find venv/bin/python
+            venv_python = op_dir / "venv" / "bin" / "python3"
+            if venv_python.exists():
+                print(f"Detected venv at {venv_python}")
+                cmd.append(str(venv_python))
+            else:
+                 cmd.append("python3")
+
+    cmd.append(str(modeld_path))
+    return cmd
+
 def run_pipeline(args):
     """
     Runs the Openpilot replay tool and modeld detection script concurrently.
@@ -45,7 +79,7 @@ def run_pipeline(args):
 
     # Construct commands
     replay_cmd = [str(replay_path), args.route] + args.replay_flags.split()
-    modeld_cmd = ["python3", str(modeld_path)]
+    modeld_cmd = get_modeld_cmd(op_dir, modeld_path, args)
 
     print("="*40)
     print("Openpilot Pipeline Runner")
@@ -113,6 +147,8 @@ if __name__ == "__main__":
     # General arguments
     parser.add_argument("--openpilot-dir", type=str, default="../openpilot",
                         help="Path to openpilot directory (default: ../openpilot)")
+    parser.add_argument("--python-cmd", type=str, default=None,
+                        help="Python command/wrapper to use (e.g. 'poetry run python3'). Auto-detected if not set.")
     parser.add_argument("--dry-run", action="store_true",
                         help="Print commands without executing them")
 
