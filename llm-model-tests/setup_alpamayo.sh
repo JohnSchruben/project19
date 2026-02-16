@@ -13,6 +13,26 @@ if ! command -v huggingface-cli &> /dev/null; then
     fi
 fi
 
+# Install dependencies mentioned in Alpamayo README
+echo "Installing Alpamayo specific dependencies..."
+echo "Installing uv..."
+pip install uv
+
+echo "Installing physical_ai_av..."
+pip install physical_ai_av
+
+echo "Installing accelerate and transformers (ensure up to date)..."
+pip install --upgrade accelerate transformers
+
+echo "Attempting to install flash-attn (optional but recommended)..."
+pip install flash-attn --no-build-isolation || echo "Warning: flash-attn failed to install. Continuing without it."
+
+# Check for ffmpeg
+if ! command -v ffmpeg &> /dev/null; then
+    echo "Warning: ffmpeg not found. It is recommended for handling video data."
+    echo "Install with: sudo apt-get install ffmpeg"
+fi
+
 # Check if token is provided as argument
 if [ -n "$1" ]; then
     echo "Logging in with provided token..."
