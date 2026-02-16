@@ -56,6 +56,13 @@ def run_pipeline(args):
     if local_bin not in os.environ["PATH"]:
         os.environ["PATH"] = f"{local_bin}:{os.environ['PATH']}"
 
+    # Hardcoded configuration (formerly general args)
+    openpilot_dir_str = "../openpilot"
+    python_cmd = None
+    new_terminal_modeld = True
+    new_terminal_replay = False
+    dry_run = False
+
     # Resolve openpilot directory
     op_dir = Path(openpilot_dir_str).resolve()
     if not op_dir.exists():
