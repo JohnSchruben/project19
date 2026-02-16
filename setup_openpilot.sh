@@ -28,6 +28,13 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+# Fix metadrive-simulator hash mismatch in uv.lock
+# The upstream package hash changed, causing uv sync to fail. We patch it with the new hash.
+echo "Patching uv.lock for metadrive-simulator..."
+if [ -f "uv.lock" ]; then
+    sed -i 's/fbf0ea9be67e65cd45d38ff930e3d49f705dd76c9ddbd1e1482e3f87b61efcef/d0afaf3b005e35e14b929d5491d2d5b64562d0c1cd5093ba969fb63908670dd4/g' uv.lock
+fi
+
 # Run ubuntu setup script
 echo "Running ubuntu setup script..."
 tools/ubuntu_setup.sh
