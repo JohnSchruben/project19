@@ -64,8 +64,10 @@ else
 fi
 
 echo "Installing package dependencies manually..."
-# Dependencies from pyproject.toml (removed physical_ai_av as it caused installation failure)
-pip install "accelerate>=1.12.0" "av>=16.0.1" "einops>=0.8.1" "hydra-colorlog>=1.2.0" "hydra-core>=1.3.2" "pandas>=2.3.3" "pillow>=12.0.0" "torch" "torchvision" "transformers" "scipy" "tqdm" "matplotlib" 
+# Dependencies from pyproject.toml (removed physical_ai_av, pinning transformers/torch to stable public versions)
+# Note: Repo asks for transformers 4.57.1 and torch 2.8.0 which don't exist publicly yet.
+# Downgrading to common stable versions to avoid 'recompute_mapping' errors.
+pip install "transformers==4.37.2" "torch==2.1.2" "torchvision==0.16.2" "accelerate>=0.27.0" "av>=16.0.1" "einops>=0.8.1" "hydra-colorlog>=1.2.0" "hydra-core>=1.3.2" "pandas>=2.3.3" "pillow>=12.0.0" "scipy" "tqdm" "matplotlib" 
 
 echo "Attempting to install physical_ai_av (optional/manual)..."
 pip install physical_ai_av || echo "Warning: physical_ai_av failed to install. Proceeding without it." 
