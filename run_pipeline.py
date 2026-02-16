@@ -12,24 +12,36 @@ def run_pipeline(args):
     Runs the Openpilot replay tool and modeld detection script concurrently.
     """
     
-    # Paths
-    replay_path = Path(args.replay_path)
-    modeld_path = Path(args.modeld_path)
-    dataset_dir = Path(args.dataset_dir)
+    # Resolve openpilot directory
+    op_dir = Path(args.openpilot_dir).resolve()
+    if not op_dir.exists() and not args.dry_run:
+        print(f"ERROR: Openpilot directory not found at {op_dir}")
+        print("Please specify correct path with --openpilot-dir")
+        return
 
-    # Check if tools exist (warn if not, but allow proceed if user insists or just for dry run)
+    # Paths (relative to openpilot_dir unless absolute)
+    replay_path = Path(args.replay_path)
+    if not replay_path.is_absolute():
+        replay_path = op_dir / replay_path
+
+    modeld_path = Path(args.modeld_path)
+    if not modeld_path.is_absolute():
+        modeld_path = op_dir / modeld_path
+
+    dataset_dir = Path(args.dataset_dir).expanduser()
+
+    # Check if tools exist
     if not replay_path.exists() and not args.dry_run:
         print(f"WARNING: Replay tool not found at {replay_path}. Ensure it is built.")
     if not modeld_path.exists() and not args.dry_run:
-        print(f"WARNING: Modeld script not found at {modeld_path}. Check path.")
-
-    # Expand user home in dataset dir
-    dataset_dir = dataset_dir.expanduser()
+        print(f"WARNING: Modeld script not found at {modeld_path}.")
 
     # Environment variables for modeld
     modeld_env = os.environ.copy()
     modeld_env["MODELD_DATASET_DIR"] = str(dataset_dir)
     modeld_env["MODELD_MAX_SEGMENT"] = str(args.max_segment)
+    # Ensure python path includes openpilot dir
+    modeld_env["PYTHONPATH"] = f"{op_dir}:{modeld_env.get('PYTHONPATH', '')}"
 
     # Construct commands
     replay_cmd = [str(replay_path), args.route] + args.replay_flags.split()
@@ -38,6 +50,7 @@ def run_pipeline(args):
     print("="*40)
     print("Openpilot Pipeline Runner")
     print("="*40)
+    print(f"Working Directory: {op_dir}")
     print(f"Replay Command: {' '.join(replay_cmd)}")
     print(f"Modeld Command: {' '.join(modeld_cmd)}")
     print(f"Modeld Env: MODELD_DATASET_DIR={dataset_dir}, MODELD_MAX_SEGMENT={args.max_segment}")
@@ -50,18 +63,20 @@ def run_pipeline(args):
     # Start modeld in background
     print("\nStarting modeld...")
     try:
-        modeld_process = subprocess.Popen(modeld_cmd, env=modeld_env)
+        # Run from op_dir so relative imports/paths work
+        modeld_process = subprocess.Popen(modeld_cmd, env=modeld_env, cwd=op_dir)
     except Exception as e:
         print(f"Error starting modeld: {e}")
         return
 
-    # Give modeld a moment to initialize (optional, but good practice)
+    # Give modeld a moment to initialize
     time.sleep(2)
 
     # Start replay in foreground
     print("\nStarting replay...")
     try:
-        subprocess.run(replay_cmd, check=True)
+        # Run from op_dir
+        subprocess.run(replay_cmd, check=True, cwd=op_dir)
     except subprocess.CalledProcessError as e:
         print(f"Replay tool failed with exit code {e.returncode}")
     except KeyboardInterrupt:
@@ -96,6 +111,8 @@ if __name__ == "__main__":
                         help="Path to modeld script (default: selfdrive/modeld_detection_second.py)")
 
     # General arguments
+    parser.add_argument("--openpilot-dir", type=str, default="../openpilot",
+                        help="Path to openpilot directory (default: ../openpilot)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Print commands without executing them")
 
