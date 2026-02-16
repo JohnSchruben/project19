@@ -1,8 +1,9 @@
 [project]
-name = "alpamayo_r1"
+name = "llm-model-tests"
 version = "0.1.0"
 requires-python = "==3.12.*"
 dependencies = [
+  "alpamayo-r1",
   "accelerate>=1.12.0",
   "av>=16.0.1",
   "einops>=0.8.1",
@@ -17,9 +18,15 @@ dependencies = [
   "flash-attn>=2.8.3",
 ]
 
+[tool.uv.sources]
+alpamayo-r1 = { path = "./alpamayo", editable = true }
+
 [build-system]
-requires = ["uv_build>=0.9.7,<0.10.0"]
-build-backend = "uv_build"
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
 
 [dependency-groups]
 dev = [

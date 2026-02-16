@@ -46,6 +46,21 @@ try:
 except Exception as e:
     print(f"Warning: Failed to patch tie_weights: {e}")
 
+except Exception as e:
+    print(f"Warning: Failed to patch tie_weights: {e}")
+
+# Monkey-patch torch.linalg.cholesky to support BFloat16 (by upcasting to Float32)
+# The Alpamayo action space utils use cholesky which fails on BFloat16.
+original_cholesky = torch.linalg.cholesky
+
+def safe_cholesky(input, *args, **kwargs):
+    if input.dtype == torch.bfloat16:
+        return original_cholesky(input.to(torch.float32), *args, **kwargs).to(torch.bfloat16)
+    return original_cholesky(input, *args, **kwargs)
+
+torch.linalg.cholesky = safe_cholesky
+print("Patched torch.linalg.cholesky for BFloat16 compatibility.")
+
 def main():
     parser = argparse.ArgumentParser(description="Test NVIDIA Alpamayo Model")
     parser.add_argument("--image", type=str, default="car-on-road-3.jpg", help="Path to input image")
