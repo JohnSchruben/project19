@@ -61,6 +61,17 @@ def safe_cholesky(input, *args, **kwargs):
 torch.linalg.cholesky = safe_cholesky
 print("Patched torch.linalg.cholesky for BFloat16 compatibility.")
 
+# Monkey-patch torch.cholesky_solve as well
+original_cholesky_solve = torch.cholesky_solve
+
+def safe_cholesky_solve(b, u, *args, **kwargs):
+    if b.dtype == torch.bfloat16 or u.dtype == torch.bfloat16:
+        return original_cholesky_solve(b.to(torch.float32), u.to(torch.float32), *args, **kwargs).to(torch.bfloat16)
+    return original_cholesky_solve(b, u, *args, **kwargs)
+
+torch.cholesky_solve = safe_cholesky_solve
+print("Patched torch.cholesky_solve for BFloat16 compatibility.")
+
 def main():
     parser = argparse.ArgumentParser(description="Test NVIDIA Alpamayo Model")
     parser.add_argument("--image", type=str, default="car-on-road-3.jpg", help="Path to input image")
