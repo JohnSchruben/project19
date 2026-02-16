@@ -8,39 +8,7 @@ import shutil
 import time
 from pathlib import Path
 
-def get_modeld_cmd(op_dir, modeld_path, args):
-    """
-    Constructs the modeld command, attempting to detect the environment runner.
-    """
-    cmd = []
-    
-    # Check if user specified a python command wrapper
-    if args.python_cmd:
-        cmd.extend(args.python_cmd.split())
-    else:
-        # Auto-detect environment
-        if (op_dir / "poetry.lock").exists():
-            print("Detected poetry environment.")
-            cmd.extend(["poetry", "run", "python3"])
-        elif (op_dir / "Pipfile").exists():
-            print("Detected pipenv environment.")
-            cmd.extend(["pipenv", "run", "python3"])
-        elif (op_dir / "uv.lock").exists():
-            print("Detected uv environment.")
-            cmd.extend(["uv", "run", "python3"])
-        else:
-            # Default to system python3
-            # If inside a venv (virtualenv), python3 should work if activated.
-            # If not activated, we might be able to find venv/bin/python
-            venv_python = op_dir / "venv" / "bin" / "python3"
-            if venv_python.exists():
-                print(f"Detected venv at {venv_python}")
-                cmd.append(str(venv_python))
-            else:
-                 cmd.append("python3")
 
-    cmd.append(str(modeld_path))
-    return cmd
 
 def get_terminal_cmd(cmd_list, env, block=False):
     """
@@ -83,11 +51,18 @@ def run_pipeline(args):
     Runs the Openpilot replay tool and modeld detection script concurrently.
     """
     
+    # Hardcoded configuration (formerly general args)
+    openpilot_dir_str = "../openpilot"
+    python_cmd = None
+    new_terminal_modeld = True
+    new_terminal_replay = False
+    dry_run = False
+
     # Resolve openpilot directory
-    op_dir = Path(args.openpilot_dir).resolve()
-    if not op_dir.exists() and not args.dry_run:
+    op_dir = Path(openpilot_dir_str).resolve()
+    if not op_dir.exists():
         print(f"ERROR: Openpilot directory not found at {op_dir}")
-        print("Please specify correct path with --openpilot-dir")
+        print("Please ensure ../openpilot exists")
         return
 
     # Paths (relative to openpilot_dir unless absolute)
@@ -102,9 +77,9 @@ def run_pipeline(args):
     dataset_dir = Path(args.dataset_dir).expanduser()
 
     # Check if tools exist
-    if not replay_path.exists() and not args.dry_run:
+    if not replay_path.exists():
         print(f"WARNING: Replay tool not found at {replay_path}. Ensure it is built.")
-    if not modeld_path.exists() and not args.dry_run:
+    if not modeld_path.exists():
         print(f"WARNING: Modeld script not found at {modeld_path}.")
 
     # Environment variables for modeld
@@ -117,7 +92,31 @@ def run_pipeline(args):
 
     # Construct commands
     replay_cmd = [str(replay_path), args.route] + args.replay_flags.split()
-    modeld_cmd = get_modeld_cmd(op_dir, modeld_path, args)
+    
+    # Helper to construct modeld cmd manually since we removed args.python_cmd
+    cmd = []
+    if python_cmd:
+        cmd.extend(python_cmd.split())
+    else:
+        # Auto-detect environment
+        if (op_dir / "poetry.lock").exists():
+            print("Detected poetry environment.")
+            cmd.extend(["poetry", "run", "python3"])
+        elif (op_dir / "Pipfile").exists():
+            print("Detected pipenv environment.")
+            cmd.extend(["pipenv", "run", "python3"])
+        elif (op_dir / "uv.lock").exists():
+            print("Detected uv environment.")
+            cmd.extend(["uv", "run", "python3"])
+        else:
+            venv_python = op_dir / "venv" / "bin" / "python3"
+            if venv_python.exists():
+                print(f"Detected venv at {venv_python}")
+                cmd.append(str(venv_python))
+            else:
+                 cmd.append("python3")
+    cmd.append(str(modeld_path))
+    modeld_cmd = cmd
 
     print("="*40)
     print("Openpilot Pipeline Runner")
@@ -126,13 +125,13 @@ def run_pipeline(args):
     print(f"Replay Command: {' '.join(replay_cmd)}")
     print(f"Modeld Command: {' '.join(modeld_cmd)}")
     print(f"Modeld Env: MODELD_DATASET_DIR={dataset_dir}, MODELD_MAX_SEGMENT={args.max_segment}, MODELD_SEGMENT_FRAMES={args.segment_frames}")
-    if args.new_terminal:
+    if new_terminal_modeld:
         print("Modeld will run in a NEW TERMINAL window.")
-    if args.replay_new_terminal:
+    if new_terminal_replay:
         print("Replay will run in a NEW TERMINAL window.")
     print("="*40)
 
-    if args.dry_run:
+    if dry_run:
         print("Dry run complete. Exiting.")
         return
 
@@ -140,7 +139,7 @@ def run_pipeline(args):
     modeld_process = None
     use_terminal_modeld = False
     
-    if args.new_terminal:
+    if new_terminal_modeld:
         term_cmd, _ = get_terminal_cmd(modeld_cmd, modeld_env, block=False)
         if term_cmd:
             print(f"\nLaunching modeld in new terminal: {' '.join(term_cmd)}")
@@ -166,7 +165,7 @@ def run_pipeline(args):
     # Start replay
     print("\nStarting replay...")
     try:
-        if args.replay_new_terminal:
+        if new_terminal_replay:
             term_cmd, is_blocking = get_terminal_cmd(replay_cmd, os.environ.copy(), block=True)
             if term_cmd:
                 print(f"Launching replay in new terminal: {' '.join(term_cmd)}")
@@ -224,20 +223,8 @@ if __name__ == "__main__":
     parser.add_argument("--modeld-path", type=str, default="selfdrive/modeld/modeld_detection_second.py",
                         help="Path to modeld script (default: selfdrive/modeld/modeld_detection_second.py)")
 
-    # General arguments
-    parser.add_argument("--openpilot-dir", type=str, default="../openpilot",
-                        help="Path to openpilot directory (default: ../openpilot)")
-    parser.add_argument("--python-cmd", type=str, default=None,
-                        help="Python command/wrapper to use (e.g. 'poetry run python3'). Auto-detected if not set.")
-    parser.add_argument("--new-terminal", action="store_true", default=True,
-                        help="Open modeld in a new terminal window to avoid output interleaving (default: True)")
-    parser.add_argument("--no-new-terminal", action="store_false", dest="new_terminal",
-                        help="Run modeld in the same terminal (background)")
-    parser.add_argument("--replay-new-terminal", action="store_true", default=False,
-                        help="Open replay tool in a new terminal window (default: False)")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Print commands without executing them")
-    
+
+
     args = parser.parse_args()
     
     # Ensure dataset directory exists
