@@ -66,8 +66,7 @@ class NotebookVisualizer:
             value="",
             layout=widgets.Layout(width='200px', height='380px', overflow='auto')
         )
-        self.lbl_telemetry = widgets.Label(value="Telemetry: N/A")
-        self.reasoning_box = widgets.VBox([self.lbl_reasoning, self.out_text, self.lbl_telemetry], layout=widgets.Layout(width='200px', flex='0 0 auto'))
+        self.reasoning_box = widgets.VBox([self.lbl_reasoning, self.out_text], layout=widgets.Layout(width='200px', flex='0 0 auto'))
 
         display(self.controls)
         
@@ -104,20 +103,29 @@ class NotebookVisualizer:
         image_path = item.get("image_path", "")
         reasoning = item.get("reasoning", "")
         trajectory = item.get("trajectory", [])
+        # Support both old 'speed' and new 'telemetry_data'
+        telemetry_data = item.get("telemetry_data", {})
         speed = item.get("speed", "N/A")
         
         # Update Counter
         self.lbl_counter.value = f"Frame {self.current_index + 1} / {len(self.data)}"
         
-        # Update Telemetry
-        if isinstance(speed, (int, float)):
-            self.lbl_telemetry.value = f"Speed: {speed:.2f} m/s"
+        # Format Telemetry HTML
+        telemetry_html = "<hr><b>Telemetry:</b><br>"
+        if telemetry_data:
+            for k, v in telemetry_data.items():
+                # Filter out verbose fields if needed, or show all
+                if k not in ["filename", "timestamp_eof"]:
+                    val_str = f"{v:.2f}" if isinstance(v, float) else str(v)
+                    telemetry_html += f"{k}: {val_str}<br>"
         else:
-            self.lbl_telemetry.value = f"Speed: {speed}"
+             # Fallback for old data
+             telemetry_html += f"Speed: {speed}<br>"
 
         # Update Text
         # Formatting for readability with HTML
-        formatted_text = f"<div style='word-wrap: break-word;'>{reasoning}</div>"
+        # Combine Reasoning + Telemetry
+        formatted_text = f"<div style='word-wrap: break-word;'>{reasoning}<br>{telemetry_html}</div>"
         self.out_text.value = formatted_text
         
         # Update Image

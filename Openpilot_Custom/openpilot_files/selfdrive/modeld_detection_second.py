@@ -489,7 +489,10 @@ def main(demo=False):
     img_name = os.path.join(raw_dir, mid + ".png")
 
     # Log telemetry (speed, steering) for dataset use
-    telemetry_file = os.path.join(seg_dir, "telemetry.jsonl")
+    tel_dir = os.path.join(seg_dir, "telemetry")
+    os.makedirs(tel_dir, exist_ok=True)
+    telemetry_file = os.path.join(tel_dir, mid + ".json")
+    
     telemetry_data = {
         "filename": mid + ".png",
         "timestamp_eof": meta_main.timestamp_eof,
@@ -498,8 +501,8 @@ def main(demo=False):
         "steering_rate_deg": float(sm["carState"].steeringRateDeg),
         "yaw_rate": float(sm["carState"].yawRate),
     }
-    with open(telemetry_file, "a") as f:
-        f.write(json.dumps(telemetry_data) + "\n")
+    with open(telemetry_file, "w") as f:
+        json.dump(telemetry_data, f, indent=2)
 
     model_output = model.run(buf_main, buf_extra, model_transform_main, model_transform_extra, inputs, prepare_only, file_name1=img_feature_name, file_name2=img_name, bgr=bgr)
     # mt2 = time.perf_counter()

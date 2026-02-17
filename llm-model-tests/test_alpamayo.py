@@ -273,30 +273,6 @@ def main():
             
         print(f"Found {len(image_files)} images.")
         
-        # Try to load telemetry (speed) if available
-        speed_map = {}
-        telemetry_path = None
-        if os.path.isdir(input_path):
-             # Check if input_path is "raw" folder, then telemetry is in parent
-             norm_path = os.path.normpath(input_path)
-             if os.path.basename(norm_path) == "raw":
-                 telemetry_path = os.path.join(os.path.dirname(norm_path), "telemetry.jsonl")
-             else:
-                 telemetry_path = os.path.join(input_path, "telemetry.jsonl")
-        
-        if telemetry_path and os.path.exists(telemetry_path):
-            print(f"Loading telemetry from {telemetry_path}...")
-            try:
-                with open(telemetry_path, "r") as f:
-                    for line in f:
-                        if line.strip():
-                            data = json.loads(line)
-                            # Map filename to v_ego
-                            speed_map[data["filename"]] = data.get("v_ego", args.speed)
-                print(f"Loaded speed data for {len(speed_map)} frames.")
-            except Exception as e:
-                print(f"Warning: Failed to parse telemetry file: {e}")
-
         results = []
         
         # History buffer for multi-frame support
@@ -314,7 +290,25 @@ def main():
                 
                 # Get speed for current frame
                 filename = os.path.basename(img_path)
-                current_speed = speed_map.get(filename, args.speed)
+                current_speed = args.speed
+                current_telemetry = {}
+                
+                # Check for per-frame telemetry file
+                # Assumes structure: segment/raw/image.png -> segment/telemetry/image.json
+                img_dir = os.path.dirname(img_path)
+                if os.path.basename(img_dir) == "raw":
+                    telemetry_dir = os.path.join(os.path.dirname(img_dir), "telemetry")
+                    json_name = os.path.splitext(filename)[0] + ".json"
+                    telemetry_path = os.path.join(telemetry_dir, json_name)
+                    
+                    if os.path.exists(telemetry_path):
+                        try:
+                            with open(telemetry_path, 'r') as f:
+                                t_data = json.load(f)
+                                current_telemetry = t_data
+                                current_speed = t_data.get("v_ego", args.speed)
+                        except Exception:
+                            pass # Fail silently gracefully to default speed
                 
                 result_data = process_image(model, processor, current_context, args.prompt, args.device, speed=current_speed)
                 
@@ -328,6 +322,7 @@ def main():
                     results.append({
                         "image_path": rel_path,
                         "speed": current_speed,
+                        "telemetry_data": current_telemetry,
                         "reasoning": result_data["reasoning"],
                         "trajectory": result_data["trajectory"]
                     })
