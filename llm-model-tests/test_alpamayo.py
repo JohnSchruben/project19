@@ -74,6 +74,8 @@ def safe_cholesky_solve(b, u, *args, **kwargs):
 torch.cholesky_solve = safe_cholesky_solve
 print("Patched torch.cholesky_solve for BFloat16 compatibility.")
 
+import json
+
 def process_image(model, processor, image_path, prompt, device, batch_size=1, num_groups=1, hist_len=10):
     try:
         # Load Image
@@ -129,13 +131,16 @@ def process_image(model, processor, image_path, prompt, device, batch_size=1, nu
                     return_extra=True,
                 )
 
-        print(f"\n--- Output for {os.path.basename(image_path)} ---")
-        print(extra["cot"][0][0]) 
+        reasoning = extra["cot"][0][0]
+        # print(f"\n--- Output for {os.path.basename(image_path)} ---")
+        # print(reasoning)
+        return reasoning
 
     except Exception as e:
         print(f"Error processing {image_path}: {e}")
         import traceback
         traceback.print_exc()
+        return None
 
 def main():
     parser = argparse.ArgumentParser(description="Test NVIDIA Alpamayo Model")
@@ -143,6 +148,7 @@ def main():
     parser.add_argument("--prompt", type=str, default="Describe this driving situation in detail.", help="Text prompt")
     parser.add_argument("--model-id", type=str, default="nvidia/Alpamayo-R1-10B", help="Hugging Face Model ID")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu", help="Device to run on")
+    parser.add_argument("--output", type=str, default="alpamayo_results.json", help="Output JSON file")
 
     args = parser.parse_args()
 
@@ -177,10 +183,27 @@ def main():
             sys.exit(1)
             
         print(f"Found {len(image_files)} images.")
+        
+        results = []
 
         for img_path in tqdm(image_files, desc="Processing Images"):
-            # print(f"Processing: {img_path}") # tqdm handles progress
-            process_image(model, processor, img_path, args.prompt, args.device)
+            reasoning = process_image(model, processor, img_path, args.prompt, args.device)
+            if reasoning:
+                # Store relative path for portability
+                try:
+                    rel_path = os.path.relpath(img_path, start=os.getcwd())
+                except ValueError:
+                    rel_path = img_path
+
+                results.append({
+                    "image_path": rel_path,
+                    "reasoning": reasoning
+                })
+        
+        # Save results
+        with open(args.output, "w") as f:
+            json.dump(results, f, indent=2)
+        print(f"Results saved to {args.output}")
 
     except Exception as e:
         print(f"Fatal Error: {e}")
