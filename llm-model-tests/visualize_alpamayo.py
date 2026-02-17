@@ -130,34 +130,29 @@ class AlpamayoViewer:
         self.ax.set_aspect('equal', adjustable='box')
         
         if trajectory and len(trajectory) > 0:
+            # Handle potential extra nesting from JSON (e.g. if shape was (1, T, 3))
+            # If trajectory[0][0] is a list, it means we have [[ [x,y,z], ... ]]
+            if isinstance(trajectory[0], list) and len(trajectory[0]) > 0 and isinstance(trajectory[0][0], list):
+                trajectory = trajectory[0]
+
             # Trajectory is likely list of [x, y, z]
             # X is usually forward, Y is left/right. 
             # We want to plot X on vertical axis (Up) and Y on horizontal.
             
-            xs = [p[0] for p in trajectory] # Forward
-            ys = [p[1] for p in trajectory] # Lateral
-            
-            # Plot
-            self.ax.plot(ys, xs, 'b.-', label='Predicted Path')
-            
-            # Mark start
-            self.ax.plot(ys[0], xs[0], 'go', label='Start')
-            
-            # Invert X axis for Lateral if needed? 
-            # Usually Y positve is Left. So standard plot is fine.
-            # Y=0 is center.
-            
-            # Set limits to make it look like a road snippet
-            # X usually 0 to 50m or 100m. Y usually -10 to 10m.
-            # Let's auto-scale but keep 0,0 visible
-            
-            # Make sure 0,0 is included
-            current_xlim = self.ax.get_xlim()
-            current_ylim = self.ax.get_ylim()
-            
-            # Re-center slightly on 0,0 if needed, but auto-scale is usually fine for trajectory
-            
-            self.ax.legend()
+            try:
+                xs = [p[0] for p in trajectory] # Forward
+                ys = [p[1] for p in trajectory] # Lateral
+                
+                # Plot
+                self.ax.plot(ys, xs, 'b.-', label='Predicted Path')
+                
+                # Mark start
+                self.ax.plot(ys[0], xs[0], 'go', label='Start')
+                
+                self.ax.legend()
+            except Exception as e:
+                print(f"Plot error: {e}")
+                self.ax.text(0.5, 0.5, "Data Format Error", ha='center', va='center')
         else:
             self.ax.text(0.5, 0.5, "No Trajectory Data", ha='center', va='center')
         

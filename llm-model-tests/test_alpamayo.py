@@ -156,14 +156,19 @@ def process_image(model, processor, image_path, prompt, device, batch_size=1, nu
         reasoning = reasoning.split("<|im_end|>")[0].strip()
         
         # Process Trajectory
-        # pred_xyz shape is likely (batch, samples, time, 3) or similar
-        # We want the first sample's trajectory
+        # pred_xyz shape is likely (batch, num_samples, time, 3)
         trajectory = []
         if pred_xyz is not None:
-            # Assuming batch=1, samples=1
-            # Take the first element
-            traj_tensor = pred_xyz[0][0] # shape (T, 3)
-            trajectory = traj_tensor.float().cpu().numpy().tolist()
+             # Move to CPU first
+            traj_tensor = pred_xyz.float().cpu() # (B, S, T, 3)
+            
+            # We want the first batch, first sample -> (T, 3)
+            if traj_tensor.dim() == 4:
+                traj_tensor = traj_tensor[0, 0]
+            elif traj_tensor.dim() == 3: # (S, T, 3) or (1, T, 3)
+                 traj_tensor = traj_tensor[0]
+                 
+            trajectory = traj_tensor.numpy().tolist()
         
         return {
             "reasoning": reasoning,
