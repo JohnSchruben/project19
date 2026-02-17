@@ -207,7 +207,7 @@ def process_image(model, processor, image_paths, prompt, device, speed=0.0, yaw_
             "ego_history_rot": ego_history_rot.contiguous(),
         }
         
-        print(f"DEBUG: Processing {image_paths[0] if isinstance(image_paths, list) else image_paths}")
+        # print(f"DEBUG: Processing {image_paths[0] if isinstance(image_paths, list) else image_paths}")
         # print(f"DEBUG: xyz shape: {ego_history_xyz.shape}, rot shape: {ego_history_rot.shape}")
         
         model_inputs = helper.to_device(model_inputs, device)
@@ -379,7 +379,7 @@ def main():
                         except Exception:
                             pass # Fail silently gracefully to default speed
                 
-                result_data = process_image(model, processor, current_context, args.prompt, args.device, speed=current_speed, yaw_rate=current_yaw_rate)
+                result_data = process_image(model, processor, current_context, args.prompt, args.device, speed=current_speed, yaw_rate=current_yaw_rate, hist_len=args.history_len)
                 
                 # Extract Future Ground Truth Trajectory
                 # We look ahead 50 steps (approx 5 seconds if 10Hz, or 2.5s if 20Hz)
