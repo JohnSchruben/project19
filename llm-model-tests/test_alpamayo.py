@@ -94,7 +94,8 @@ def process_image(model, processor, image_paths, prompt, device, speed=0.0, yaw_
         
         # Construct message for processor - Alpamayo Template from helper.py
         # We interleave images first, then text
-        num_traj_token = 48
+        # Make num_traj_token dynamic based on history length (assuming 3 tokens per step)
+        num_traj_token = hist_len * 3
         hist_traj_placeholder = f"<|traj_history_start|>{'<|traj_history|>' * num_traj_token}<|traj_history_end|>"
         
         # We start with the prompt text required by the model
