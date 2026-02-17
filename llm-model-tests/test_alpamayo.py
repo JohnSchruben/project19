@@ -92,31 +92,56 @@ def process_image(model, processor, image_paths, prompt, device, speed=0.0, yaw_
         for p in image_paths:
             images.append(Image.open(p).convert("RGB"))
         
-        # Construct message for processor
+        # Construct message for processor - Alpamayo Template from helper.py
         # We interleave images first, then text
-        content = [{"type": "image", "image": img} for img in images]
-        content.append({"type": "text", "text": prompt})
+        num_traj_token = 48
+        hist_traj_placeholder = f"<|traj_history_start|>{'<|traj_history|>' * num_traj_token}<|traj_history_end|>"
+        
+        # We start with the prompt text required by the model
+        # "output the chain-of-thought reasoning of the driving process, then output the future trajectory."
+        query_text = f"{hist_traj_placeholder}output the chain-of-thought reasoning of the driving process, then output the future trajectory."
         
         messages = [
             {
+                "role": "system",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "You are a driving assistant that generates safe and accurate actions.",
+                    }
+                ],
+            },
+            {
                 "role": "user",
-                "content": content
-            }
+                "content": [{"type": "image", "image": img} for img in images]
+                + [{"type": "text", "text": query_text}],
+            },
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "<|cot_start|>",
+                    }
+                ],
+            },
         ]
 
         # Use processor to format
         inputs = processor.apply_chat_template(
             messages,
             tokenize=True,
-            add_generation_prompt=True,
+            add_generation_prompt=True, # This might double-add assistant start if not careful, but apply_chat_template usually handles it. 
+            # Actually, standard apply_chat_template might not handle the pre-filled "assistant" role correctly for all models.
+            # Qwen usually handles it.
             return_dict=True,
             return_tensors="pt",
         )
         
         # Prepare inputs with synthetic history
         # Shape: (Batch, Num_Groups, Hist_Len, 3)
-        # Assuming 10Hz sampling (0.1s per step)
-        dt = 0.1
+        # Assuming 20Hz sampling (0.05s per step)
+        dt = 0.05
         ego_history_xyz = torch.zeros((batch_size, num_groups, hist_len, 3), dtype=model.dtype, device=device)
         
         # Shape: (Batch, Num_Groups, Hist_Len, 3, 3)
@@ -191,12 +216,14 @@ def process_image(model, processor, image_paths, prompt, device, speed=0.0, yaw_
                     data=model_inputs,
                     top_p=0.98,
                     temperature=0.6,
-                    num_traj_samples=1, 
+                    num_traj_samples=4, # Request 4 samples as per user request
                     max_generation_length=512,
                     return_extra=True,
                 )
 
-        # Extract raw object
+        # Extract raw object for reasoning (CoT)
+        # extra["cot"] shape: (Batch, Num_Samples) or similar
+        # We'll just take the first sample's reasoning for display
         raw_obj = extra["cot"][0][0]
         
         # Handle numpy/list wrapping
@@ -212,7 +239,6 @@ def process_image(model, processor, image_paths, prompt, device, speed=0.0, yaw_
         reasoning = str(raw_obj)
 
         # Parse out assistant response
-        # The prompt usually follows ChatML format
         search_term = "<|im_start|>assistant\n"
         if search_term in reasoning:
             reasoning = reasoning.split(search_term)[-1]
@@ -220,35 +246,23 @@ def process_image(model, processor, image_paths, prompt, device, speed=0.0, yaw_
         # Remove end token
         reasoning = reasoning.split("<|im_end|>")[0].strip()
         
-        # Process Trajectory
-        # pred_xyz shape is likely (batch, num_samples, time, 3)
-        trajectory = []
+        # Process Trajectories
+        # pred_xyz shape: (batch_size, num_traj_samples, time_steps, 3)
+        trajectories = []
         if pred_xyz is not None:
              # Move to CPU first
             traj_tensor = pred_xyz.float().cpu() # (B, S, T, 3)
             
-            # Flatten to (Total_Points, 3) to strictly ensure we have a list of points
-            # We assume we only want the FIRST sample of the FIRST batch.
-            # If shape is (1, 1, T, 3), we want (T, 3).
-            # If shape is (1, S, T, 3), we pick index 0.
-            
-            if traj_tensor.numel() > 0:
-                # Reshape to (-1, 3) to flatten batch/sample dims
-                flat_traj = traj_tensor.reshape(-1, 3)
-                
-                # However, if batch>1 or samples>1, we might merge multiple trajectories if we just flatten.
-                # So we should be careful. 
-                # Let's trust unwrapping by index if we know dimensions.
-                
-                # Safe unwrap:
-                while traj_tensor.dim() > 2:
-                    traj_tensor = traj_tensor[0]
-                    
-                trajectory = traj_tensor.numpy().tolist()
+            # We assume batch_size=1
+            # We want all samples: (S, T, 3)
+            if traj_tensor.shape[0] > 0:
+                samples = traj_tensor[0] # (S, T, 3)
+                # Convert to list of lists
+                trajectories = samples.numpy().tolist() # List[List[List[float]]]
         
         return {
             "reasoning": reasoning,
-            "trajectory": trajectory
+            "trajectories": trajectories # Return list of trajectories
         }
 
     except Exception as e:
@@ -260,7 +274,7 @@ def process_image(model, processor, image_paths, prompt, device, speed=0.0, yaw_
 def main():
     parser = argparse.ArgumentParser(description="Test NVIDIA Alpamayo Model")
     parser.add_argument("--image", type=str, default="car-on-road-3.jpg", help="Path to input image or directory")
-    parser.add_argument("--prompt", type=str, default="Describe this driving situation in detail.", help="Text prompt")
+    parser.add_argument("--prompt", type=str, default="You are an autonomous driving agent. Analyze the scene and plan a safe trajectory for the ego vehicle.", help="Text prompt")
     parser.add_argument("--model-id", type=str, default="nvidia/Alpamayo-R1-10B", help="Hugging Face Model ID")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu", help="Device to run on")
     parser.add_argument("--output", type=str, default="alpamayo_results.json", help="Output JSON file")
@@ -358,6 +372,65 @@ def main():
                 
                 result_data = process_image(model, processor, current_context, args.prompt, args.device, speed=current_speed, yaw_rate=current_yaw_rate)
                 
+                # Extract Future Ground Truth Trajectory
+                # We look ahead 50 steps (approx 5 seconds if 10Hz, or 2.5s if 20Hz)
+                # Alpamayo likely outputs 3-5 seconds. Let's try to get 50 points.
+                gt_trajectory = []
+                x_gt, y_gt, theta_gt = 0.0, 0.0, 0.0
+                dt_sim = 0.1 # Integration step size (should match dataset frame rate)
+                
+                # We need to know the frame index to find future frames
+                # Assuming filenames are sequential numbers: 000000.png, 000001.png
+                try:
+                    base_name = os.path.splitext(filename)[0]
+                    frame_idx = int(base_name)
+                    
+                    for t in range(1, 51): # 50 future steps
+                        next_idx = frame_idx + t
+                        next_mid = f"{next_idx:06d}"
+                        
+                        # Construct path to next telemetry
+                        # Re-use telemetry_dir from earlier
+                        if os.path.basename(img_dir) == "raw":
+                            telemetry_dir = os.path.join(os.path.dirname(img_dir), "telemetry")
+                            next_json_path = os.path.join(telemetry_dir, next_mid + ".json")
+                            
+                            v_next = 0.0
+                            w_next = 0.0
+                            
+                            if os.path.exists(next_json_path):
+                                try:
+                                    with open(next_json_path, 'r') as f:
+                                        nd = json.load(f)
+                                        v_next = nd.get("v_ego", 0.0)
+                                        w_next = nd.get("yaw_rate", 0.0)
+                                except:
+                                    pass
+                            
+                            # Integrate
+                            # Coordinate system: +X Forward, +Y Left
+                            # dx = v * cos(theta) * dt
+                            # dy = v * sin(theta) * dt
+                            # dtheta = w * dt
+                            
+                            # Note: Openpilot/Alpamayo coordinate system might differ.
+                            # Usually Alpamayo is: X forward, Y left.
+                            # Theta=0 is forward (+X).
+                            # Positive Yaw Rate = Left Turn (+Theta).
+                            
+                            dx = v_next * dt_sim * np.cos(theta_gt)
+                            dy = v_next * dt_sim * np.sin(theta_gt)
+                            dtheta = w_next * dt_sim
+                            
+                            x_gt += dx
+                            y_gt += dy
+                            theta_gt += dtheta
+                            
+                            gt_trajectory.append([x_gt, y_gt])
+                except ValueError:
+                    # Filename not an integer, skip GT
+                    pass
+
                 if result_data:
                     # Store relative path for portability
                     try:
@@ -370,7 +443,8 @@ def main():
                         "speed": current_speed,
                         "telemetry_data": current_telemetry,
                         "reasoning": result_data["reasoning"],
-                        "trajectory": result_data["trajectory"]
+                        "trajectories": result_data["trajectories"], # List of trajectories
+                        "gt_trajectory": gt_trajectory # Ground Truth
                     })
         except KeyboardInterrupt:
             print("\n\nProcess interrupted by user. Saving results processed so far...")

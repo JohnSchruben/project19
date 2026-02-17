@@ -102,7 +102,16 @@ class NotebookVisualizer:
         item = self.data[self.current_index]
         image_path = item.get("image_path", "")
         reasoning = item.get("reasoning", "")
-        trajectory = item.get("trajectory", [])
+        
+        # New Data Structures
+        trajectories = item.get("trajectories", [])
+        gt_trajectory = item.get("gt_trajectory", [])
+        
+        # Backward Compatibility
+        old_trajectory = item.get("trajectory", [])
+        if not trajectories and old_trajectory:
+            trajectories = [old_trajectory]
+
         # Support both old 'speed' and new 'telemetry_data'
         telemetry_data = item.get("telemetry_data", {})
         speed = item.get("speed", "N/A")
@@ -146,9 +155,9 @@ class NotebookVisualizer:
         # Update Plot
         with self.out_plot:
             clear_output(wait=True)
-            self.plot_trajectory(trajectory)
+            self.plot_trajectory(trajectories, gt_trajectory)
 
-    def plot_trajectory(self, trajectory):
+    def plot_trajectory(self, trajectories, gt_trajectory=None):
         # Create figure
         # We use 'ioff' to prevent it from displaying automatically outside the widget
         plt.ioff()
@@ -159,51 +168,72 @@ class NotebookVisualizer:
         ax.grid(True)
         ax.set_aspect('equal', adjustable='datalim')
         
-        if trajectory and len(trajectory) > 0:
-            # Flatten logic same as visualize_alpamayo.py
-            depth_limit = 5
-            curr_depth = 0
-            while isinstance(trajectory, list) and len(trajectory) > 0 and curr_depth < depth_limit:
-                first_item = trajectory[0]
-                if isinstance(first_item, list) and len(first_item) == 3 and all(isinstance(x, (int, float)) for x in first_item):
-                    break
-                if isinstance(first_item, list):
-                    trajectory = first_item
-                else:
-                    break
-                curr_depth += 1
+        all_points_x = []
+        all_points_y = []
 
+        # Plot Ground Truth (Red)
+        if gt_trajectory and len(gt_trajectory) > 0:
             try:
-                xs = [p[0] for p in trajectory]
-                ys = [p[1] for p in trajectory]
-                
-                ax.plot(ys, xs, 'b.-', label='Path')
-                ax.plot(ys[0], xs[0], 'go', label='Start')
-                
-                # Dynamic limits to show full path
-                min_lat = min(ys)
-                max_lat = max(ys)
-                min_long = min(xs)
-                max_long = max(xs)
-                
-                # Enforce minimum width/height to avoid thin lines
-                lat_span = max(10.0, max_lat - min_lat)
-                long_span = max(15.0, max_long - min_long)
-                
-                # Center view
-                center_lat = (min_lat + max_lat) / 2.0
-                center_long = (min_long + max_long) / 2.0
-                
-                # Add buffer
-                buffer = 2.0
-                ax.set_xlim(center_lat - lat_span/2.0 - buffer, center_lat + lat_span/2.0 + buffer)
-                ax.set_ylim(center_long - long_span/2.0 - buffer, center_long + long_span/2.0 + buffer)
-                    
-                ax.legend()
+                xs = [p[0] for p in gt_trajectory]
+                ys = [p[1] for p in gt_trajectory]
+                ax.plot(ys, xs, 'r-', linewidth=2, label='Ground Truth')
+                all_points_x.extend(xs)
+                all_points_y.extend(ys)
             except Exception as e:
-                ax.text(0.5, 0.5, f"Error: {str(e)}", ha='center', va='center')
+                print(f"Error plotting GT: {e}")
+
+        # Plot Predictions
+        colors = ['b', 'c', 'm', 'orange', 'purple']
+        if trajectories and len(trajectories) > 0:
+            for i, traj in enumerate(trajectories):
+                # Flatten/Unwrap logic if needed (similar to before, just in case)
+                # Assuming simple list of points for now based on test_alpamayo updates
+                
+                # Check structure validity
+                if not isinstance(traj, list) or len(traj) == 0:
+                    continue
+                
+                try:
+                    xs = [p[0] for p in traj]
+                    ys = [p[1] for p in traj]
+                    
+                    color = colors[i % len(colors)]
+                    label = f'Pred {i+1}' if i < 3 else None # Don't clutter legend
+                    
+                    ax.plot(ys, xs, color=color, marker='.', markersize=2, linestyle='-', linewidth=1, label=label)
+                    
+                    # Mark Start
+                    if i == 0:
+                        ax.plot(ys[0], xs[0], 'go', label='Start')
+                    
+                    all_points_x.extend(xs)
+                    all_points_y.extend(ys)
+                except Exception as e:
+                    print(f"Error plotting traj {i}: {e}")
+
+        if len(all_points_x) > 0:
+             # Dynamic limits to show full path
+            min_lat = min(all_points_y)
+            max_lat = max(all_points_y)
+            min_long = min(all_points_x)
+            max_long = max(all_points_x)
+            
+            # Enforce minimum width/height to avoid thin lines
+            lat_span = max(10.0, max_lat - min_lat)
+            long_span = max(15.0, max_long - min_long)
+            
+            # Center view
+            center_lat = (min_lat + max_lat) / 2.0
+            center_long = (min_long + max_long) / 2.0
+            
+            # Add buffer
+            buffer = 2.0
+            ax.set_xlim(center_lat - lat_span/2.0 - buffer, center_lat + lat_span/2.0 + buffer)
+            ax.set_ylim(center_long - long_span/2.0 - buffer, center_long + long_span/2.0 + buffer)
+            
+            ax.legend(loc='upper right', fontsize='small')
         else:
-            ax.text(0.5, 0.5, "No Trajectory Data", ha='center', va='center')
+            ax.text(0.5, 0.5, "No Valid Trajectory Data", ha='center', va='center')
             
         # Display the figure in the output widget
         display(fig)
