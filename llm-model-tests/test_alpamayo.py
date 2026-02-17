@@ -299,7 +299,7 @@ def main():
     parser.add_argument("--model-id", type=str, default="nvidia/Alpamayo-R1-10B", help="Hugging Face Model ID")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu", help="Device to run on")
     parser.add_argument("--output", type=str, default="alpamayo_results.json", help="Output JSON file")
-    parser.add_argument("--history-len", type=int, default=16, help="Number of frames to use as context (default: 16)")
+    parser.add_argument("--history-len", type=int, default=1, help="Number of visual frames to use as context (default: 1)")
     parser.add_argument("--speed", type=float, default=10.0, help="Simulated vehicle speed in m/s (default: 10.0)")
 
     args = parser.parse_args()
@@ -391,7 +391,10 @@ def main():
                         except Exception:
                             pass # Fail silently gracefully to default speed
                 
-                result_data = process_image(model, processor, current_context, args.prompt, args.device, speed=current_speed, yaw_rate=current_yaw_rate, hist_len=args.history_len)
+                # Decouple visual history (args.history_len) from kinematic history (must be 16 for model compatibility)
+                # Visual history: determines how many images are processed (affects speed)
+                # Kinematic history: determines ego_history tensor size (affects crash/stability)
+                result_data = process_image(model, processor, current_context, args.prompt, args.device, speed=current_speed, yaw_rate=current_yaw_rate, hist_len=16)
                 
                 # Extract Future Ground Truth Trajectory
                 # We look ahead 50 steps (approx 5 seconds if 10Hz, or 2.5s if 20Hz)
