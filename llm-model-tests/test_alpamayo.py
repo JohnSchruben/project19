@@ -220,20 +220,23 @@ def main():
         
         results = []
 
-        for img_path in tqdm(image_files, desc="Processing Images"):
-            result_data = process_image(model, processor, img_path, args.prompt, args.device)
-            if result_data:
-                # Store relative path for portability
-                try:
-                    rel_path = os.path.relpath(img_path, start=os.getcwd())
-                except ValueError:
-                    rel_path = img_path
+        try:
+            for img_path in tqdm(image_files, desc="Processing Images"):
+                result_data = process_image(model, processor, img_path, args.prompt, args.device)
+                if result_data:
+                    # Store relative path for portability
+                    try:
+                        rel_path = os.path.relpath(img_path, start=os.getcwd())
+                    except ValueError:
+                        rel_path = img_path
 
-                results.append({
-                    "image_path": rel_path,
-                    "reasoning": result_data["reasoning"],
-                    "trajectory": result_data["trajectory"]
-                })
+                    results.append({
+                        "image_path": rel_path,
+                        "reasoning": result_data["reasoning"],
+                        "trajectory": result_data["trajectory"]
+                    })
+        except KeyboardInterrupt:
+            print("\n\nProcess interrupted by user. Saving results processed so far...")
         
         # Save results
         with open(args.output, "w") as f:
