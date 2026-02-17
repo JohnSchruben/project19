@@ -395,6 +395,16 @@ def main():
                                 current_telemetry = t_data
                                 current_speed = t_data.get("v_ego", args.speed)
                                 current_yaw_rate = t_data.get("yaw_rate", 0.0)
+                                current_steer_deg = t_data.get("steering_angle_deg", 0.0)
+                                
+                                # Fallback: If yaw_rate is 0 but steering is active, derive yaw_rate
+                                # Kinematic Bicycle Model: yaw_rate = v * tan(delta) / L
+                                # Average Steer Ratio ~15.0, Wheelbase ~2.8m
+                                if abs(current_yaw_rate) < 1e-4 and abs(current_steer_deg) > 0.5:
+                                    steer_rad = np.deg2rad(current_steer_deg) / 15.0
+                                    current_yaw_rate = current_speed * np.tan(steer_rad) / 2.8
+                                    # print(f"Derived Yaw Rate from Steer {current_steer_deg:.1f}: {current_yaw_rate:.4f}")
+                                    
                         except Exception:
                             pass # Fail silently gracefully to default speed
                 
