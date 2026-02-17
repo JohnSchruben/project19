@@ -186,23 +186,58 @@ class NotebookVisualizer:
         colors = ['b', 'c', 'm', 'orange', 'purple']
         if trajectories and len(trajectories) > 0:
             for i, traj in enumerate(trajectories):
-                # Flatten/Unwrap logic if needed (similar to before, just in case)
-                # Assuming simple list of points for now based on test_alpamayo updates
+                # Flatten/Unwrap logic to handle various nestings
+                # We expect traj to be List[[x,y,z], [x,y,z], ...]
+                # If it is List[List[List...]], unwrap it
                 
-                # Check structure validity
-                if not isinstance(traj, list) or len(traj) == 0:
-                    continue
+                temp_traj = traj
+                depth = 0
+                while isinstance(temp_traj, (list, tuple)) and len(temp_traj) > 0 and depth < 3:
+                     # Check if the first element is a point [x, y, z] (numbers)
+                     first_elem = temp_traj[0]
+                     if isinstance(first_elem, (list, tuple)):
+                         # It's a list, check if it's a point
+                         if len(first_elem) >= 2 and isinstance(first_elem[0], (int, float)):
+                             # Found the list of points!
+                             break
+                         else:
+                             # It's a list of lists (not points), drill down
+                             # Assuming we want the first trajectory if multiple are wrapped?
+                             # Actually for "trajectories" list, each item SHOULD be a trajectory.
+                             # If "traj" itself is a list of trajectories, we might be iterating wrong.
+                             # But let's assume valid data is just nested.
+                             temp_traj = temp_traj[0] # Take first element? Or flatten?
+                             # Taking first element might lose data if it was a batch.
+                             # But here we are inside "for traj in trajectories".
+                             pass 
+                     else:
+                         # It's not a list, maybe it's numbers?
+                         # If temp_traj is [x, y, z], then we shouldn't be here in this loop unless we treat single point as traj?
+                         pass
+                     
+                     depth += 1
+                     
+                # Re-verify we have points
+                # If temp_traj is [ [x,y], [x,y] ]
                 
                 try:
-                    xs = [p[0] for p in traj]
-                    ys = [p[1] for p in traj]
+                    # Validate first point
+                    if not isinstance(temp_traj, (list, tuple)) or len(temp_traj) == 0:
+                        continue
+                        
+                    p0 = temp_traj[0]
+                    if not (isinstance(p0, (list, tuple)) and len(p0) >= 2 and isinstance(p0[0], (int, float))):
+                        # print(f"Skipping invalid traj structure: {type(p0)}")
+                        continue
+
+                    xs = [float(p[0]) for p in temp_traj]
+                    ys = [float(p[1]) for p in temp_traj]
                     
                     color = colors[i % len(colors)]
-                    label = f'Pred {i+1}' if i < 3 else None # Don't clutter legend
+                    label = f'Pred {i+1}' if i < 3 else None
                     
                     ax.plot(ys, xs, color=color, marker='.', markersize=2, linestyle='-', linewidth=1, label=label)
                     
-                    # Mark Start
                     if i == 0:
                         ax.plot(ys[0], xs[0], 'go', label='Start')
                     
@@ -213,25 +248,31 @@ class NotebookVisualizer:
 
         if len(all_points_x) > 0:
              # Dynamic limits to show full path
-            min_lat = min(all_points_y)
-            max_lat = max(all_points_y)
-            min_long = min(all_points_x)
-            max_long = max(all_points_x)
-            
-            # Enforce minimum width/height to avoid thin lines
-            lat_span = max(10.0, max_lat - min_lat)
-            long_span = max(15.0, max_long - min_long)
-            
-            # Center view
-            center_lat = (min_lat + max_lat) / 2.0
-            center_long = (min_long + max_long) / 2.0
-            
-            # Add buffer
-            buffer = 2.0
-            ax.set_xlim(center_lat - lat_span/2.0 - buffer, center_lat + lat_span/2.0 + buffer)
-            ax.set_ylim(center_long - long_span/2.0 - buffer, center_long + long_span/2.0 + buffer)
-            
-            ax.legend(loc='upper right', fontsize='small')
+            try:
+                min_lat = min(all_points_y)
+                max_lat = max(all_points_y)
+                min_long = min(all_points_x)
+                max_long = max(all_points_x)
+                
+                # Enforce minimum width/height to avoid thin lines
+                lat_span = max(10.0, max_lat - min_lat)
+                long_span = max(15.0, max_long - min_long)
+                
+                # Center view
+                center_lat = (min_lat + max_lat) / 2.0
+                center_long = (min_long + max_long) / 2.0
+                
+                # Add buffer
+                buffer = 2.0
+                ax.set_xlim(center_lat - lat_span/2.0 - buffer, center_lat + lat_span/2.0 + buffer)
+                ax.set_ylim(center_long - long_span/2.0 - buffer, center_long + long_span/2.0 + buffer)
+                
+                ax.legend(loc='upper right', fontsize='small')
+            except Exception as e:
+                print(f"Error setting plot limits: {e}")
+                # Fallback limits
+                ax.set_xlim(-10, 10)
+                ax.set_ylim(0, 50)
         else:
             ax.text(0.5, 0.5, "No Valid Trajectory Data", ha='center', va='center')
             
