@@ -228,8 +228,8 @@ if __name__ == "__main__":
                         help="Path to replay executable (default: ./tools/replay/replay)")
 
     # Modeld arguments
-    parser.add_argument("--dataset-dir", type=str, default="~/project19/datasets/leaf_run_2",
-                        help="Directory for modeld output (default: ~/project19/datasets/leaf_run_2)")
+    parser.add_argument("--dataset-dir", type=str, default="~/project19/datasets/leaf_run",
+                        help="Directory for modeld output (default: ~/project19/datasets/leaf_run)")
     parser.add_argument("--max-segment", type=int, default=12,
                         help="Max segment for modeld (default: 12)")
     parser.add_argument("--segment-frames", type=int, default=175,
