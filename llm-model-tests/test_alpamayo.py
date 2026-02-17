@@ -13,17 +13,22 @@ try:
 except ImportError:
     # Fallback: check if local 'alpamayo/src' exists and add to path
     import os
+    # Check current directory "alpamayo/src"
     local_src = os.path.join(os.path.dirname(__file__), "alpamayo", "src")
+    # Check parent directory "../alpamayo/src" (project root structure)
+    parent_src = os.path.join(os.path.dirname(__file__), "..", "alpamayo", "src")
+    
     if os.path.exists(local_src):
         print(f"Adding local source to path: {local_src}")
         sys.path.append(local_src)
-        try:
-            from alpamayo_r1.models.alpamayo_r1 import AlpamayoR1
-            from alpamayo_r1 import helper
-        except ImportError as e:
-            print(f"Error importing from local source: {e}")
-            sys.exit(1)
+    elif os.path.exists(parent_src):
+        # Resolve to absolute path
+        parent_src = os.path.abspath(parent_src)
+        print(f"Adding parent source to path: {parent_src}")
+        sys.path.append(parent_src)
     else:
+        # Fallback to try importing anyway, maybe it is installed globally
+        pass
         print("Error: alpamayo_r1 package not found and local 'alpamayo/src' not found.")
         print("Please run ./setup_alpamayo.sh to clone the repository.")
         sys.exit(1)
@@ -206,6 +211,7 @@ def main():
     parser.add_argument("--model-id", type=str, default="nvidia/Alpamayo-R1-10B", help="Hugging Face Model ID")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu", help="Device to run on")
     parser.add_argument("--output", type=str, default="alpamayo_results.json", help="Output JSON file")
+    parser.add_argument("--history-len", type=int, default=1, help="Number of frames to use as context (including current)")
 
     args = parser.parse_args()
 
