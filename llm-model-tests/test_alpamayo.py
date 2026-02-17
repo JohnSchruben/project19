@@ -157,7 +157,7 @@ def process_image(model, processor, image_paths, prompt, device, speed=0.0, yaw_
             if abs(yaw_rate) < 1e-4:
                 # Straight line motion
                 x_offsets = t * speed
-                ego_history_xyz[:, :, :, 0] = x_offsets.view(1, 1, -1)
+                ego_history_xyz[:, :, :, 0] = x_offsets.view(1, 1, -1).contiguous()
                 # Rotation remains identity
             else:
                 # Curved motion (Circular Arc)
@@ -172,8 +172,8 @@ def process_image(model, processor, image_paths, prompt, device, speed=0.0, yaw_
                 x_offsets = r * torch.sin(theta)
                 y_offsets = r * (1.0 - torch.cos(theta))
                 
-                ego_history_xyz[:, :, :, 0] = x_offsets.view(1, 1, -1)
-                ego_history_xyz[:, :, :, 1] = y_offsets.view(1, 1, -1)
+                ego_history_xyz[:, :, :, 0] = x_offsets.view(1, 1, -1).contiguous()
+                ego_history_xyz[:, :, :, 1] = y_offsets.view(1, 1, -1).contiguous()
                 
                 # Update Rotation Matrix (Rotation around Z)
                 c = torch.cos(theta).view(1, 1, -1)
@@ -266,7 +266,7 @@ def process_image(model, processor, image_paths, prompt, device, speed=0.0, yaw_
         }
 
     except Exception as e:
-        print(f"Error processing {image_path}: {e}")
+        print(f"Error processing {image_paths[0]}: {e}")
         import traceback
         traceback.print_exc()
         return None
