@@ -225,7 +225,7 @@ def process_image(model, processor, image_paths, prompt, device, speed=0.0, yaw_
                     data=model_inputs,
                     top_p=0.98,
                     temperature=0.6,
-                    num_traj_samples=4, # Request 4 samples as per user request
+                    num_traj_samples=1, # Reduced from 4 to 1 as per user request
                     max_generation_length=512,
                     return_extra=True,
                 )
@@ -394,20 +394,21 @@ def main():
                 # Decouple visual history (args.history_len) from kinematic history (must be 16 for model compatibility)
                 # Visual history: determines how many images are processed (affects speed)
                 # Kinematic history: determines ego_history tensor size (affects crash/stability)
-                result_data = process_image(model, processor, current_context, args.prompt, args.device, speed=current_speed, yaw_rate=current_yaw_rate, hist_len=16)
+                result_data = process_image(model, processor, current_context, args.prompt, args.device, speed=current_speed, yaw_rate=current_yaw_rate, hist_len=args.history_len)
                 
                 # Extract Future Ground Truth Trajectory
                 # We look ahead 50 steps (approx 5 seconds if 10Hz, or 2.5s if 20Hz)
                 # Alpamayo likely outputs 3-5 seconds. Let's try to get 50 points.
                 gt_trajectory = []
                 x_gt, y_gt, theta_gt = 0.0, 0.0, 0.0
-                dt_sim = 0.1 # Integration step size (should match dataset frame rate)
                 
                 # We need to know the frame index to find future frames
                 # Assuming filenames are sequential numbers: 000000.png, 000001.png
                 try:
                     base_name = os.path.splitext(filename)[0]
                     frame_idx = int(base_name)
+                    
+                    last_ts = current_telemetry.get('timestamp_eof', None)
                     
                     for t in range(1, 51): # 50 future steps
                         next_idx = frame_idx + t
@@ -416,11 +417,14 @@ def main():
                         # Construct path to next telemetry
                         # Re-use telemetry_dir from earlier
                         if os.path.basename(img_dir) == "raw":
+                            # Standard openpilot directory structure: .../segment/raw/000000.png
+                            # Telemetry is at .../segment/telemetry/000000.json
                             telemetry_dir = os.path.join(os.path.dirname(img_dir), "telemetry")
                             next_json_path = os.path.join(telemetry_dir, next_mid + ".json")
                             
                             v_next = 0.0
                             w_next = 0.0
+                            dt_step = 0.05 # Default to 20Hz
                             
                             if os.path.exists(next_json_path):
                                 try:
@@ -428,6 +432,23 @@ def main():
                                         nd = json.load(f)
                                         v_next = nd.get("v_ego", 0.0)
                                         w_next = nd.get("yaw_rate", 0.0)
+                                        next_ts = nd.get("timestamp_eof", None)
+                                        
+                                        if last_ts is not None and next_ts is not None:
+                                            # Convert nanoseconds/microseconds to seconds
+                                            # Openpilot logs usually use nanoseconds (1e9) or microseconds (1e6)
+                                            # Timestamp generally increases.
+                                            diff = next_ts - last_ts
+                                            if diff > 1e8: # likely nanoseconds
+                                                dt_step = diff / 1e9
+                                            elif diff > 1e5: # likely microseconds
+                                                dt_step = diff / 1e6
+                                            
+                                            # Sanity check dt
+                                            if dt_step <= 0 or dt_step > 1.0:
+                                                dt_step = 0.05
+                                        
+                                        last_ts = next_ts
                                 except:
                                     pass
                             
@@ -437,14 +458,9 @@ def main():
                             # dy = v * sin(theta) * dt
                             # dtheta = w * dt
                             
-                            # Note: Openpilot/Alpamayo coordinate system might differ.
-                            # Usually Alpamayo is: X forward, Y left.
-                            # Theta=0 is forward (+X).
-                            # Positive Yaw Rate = Left Turn (+Theta).
-                            
-                            dx = v_next * dt_sim * np.cos(theta_gt)
-                            dy = v_next * dt_sim * np.sin(theta_gt)
-                            dtheta = w_next * dt_sim
+                            dx = v_next * dt_step * np.cos(theta_gt)
+                            dy = v_next * dt_step * np.sin(theta_gt)
+                            dtheta = w_next * dt_step
                             
                             x_gt += dx
                             y_gt += dy
