@@ -308,8 +308,22 @@ def main():
         from collections import deque
         history_buffer = deque(maxlen=args.history_len)
 
+        import signal
+        
+        # Robust Signal Handling
+        stop_execution = False
+        def signal_handler(sig, frame):
+            nonlocal stop_execution
+            print("\nSignal received. Stopping gracefully...")
+            stop_execution = True
+
+        signal.signal(signal.SIGINT, signal_handler)
+
         try:
             for img_path in tqdm(image_files, desc="Processing Images"):
+                if stop_execution:
+                    break
+                    
                 # Add current image to history
                 history_buffer.append(img_path)
                 
