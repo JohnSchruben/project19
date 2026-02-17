@@ -81,7 +81,7 @@ print("Patched torch.cholesky_solve for BFloat16 compatibility.")
 
 import json
 
-def process_image(model, processor, image_paths, prompt, device, speed=0.0, batch_size=1, num_groups=1, hist_len=10):
+def process_image(model, processor, image_paths, prompt, device, speed=0.0, yaw_rate=0.0, batch_size=1, num_groups=1, hist_len=10):
     try:
         # Load Images
         # image_paths can be a single string or a list
@@ -119,30 +119,59 @@ def process_image(model, processor, image_paths, prompt, device, speed=0.0, batc
         dt = 0.1
         ego_history_xyz = torch.zeros((batch_size, num_groups, hist_len, 3), dtype=model.dtype, device=device)
         
-        if speed > 0:
-            # Generate linear backward history: we were at -x before.
-            # Index i: 0 is oldest? Or newest? 
-            # Usually transformers expect chronological order: 0=oldest, -1=newest (current).
-            # Current pos is (0,0,0).
-            # Previous pos (-1) was at (-v*dt, 0, 0).
-            # Oldest pos (0) was at (-(hist_len-1)*v*dt, 0, 0).
-            
-            # Create a sequence of offsets
-            # offsets = [-(hist_len - 1 - i) * dt * speed for i in range(hist_len)]
-            
-            # Implementation using torch
-            steps = torch.arange(hist_len, dtype=model.dtype, device=device) # 0, 1, ..., N-1
-            # We want 0 to be furthest back: -(N-1)
-            # steps - (N-1) gives -(N-1), ..., 0
-            steps = steps - (hist_len - 1)
-            
-            x_offsets = steps * dt * speed
-            
-            # Assign to X channel (0)
-            ego_history_xyz[:, :, :, 0] = x_offsets.view(1, 1, -1)
-            
         # Shape: (Batch, Num_Groups, Hist_Len, 3, 3)
         ego_history_rot = torch.eye(3, dtype=model.dtype, device=device).view(1, 1, 1, 3, 3).repeat(batch_size, num_groups, hist_len, 1, 1)
+
+        if speed > 0 or abs(yaw_rate) > 1e-4:
+            # Generate history sequence
+            # Index (N-1) is current time (t=0), Index 0 is oldest (t = -(N-1)*dt)
+            steps = torch.arange(hist_len, dtype=model.dtype, device=device)
+            steps = steps - (hist_len - 1)
+            t = steps * dt # Negative time values
+            
+            if abs(yaw_rate) < 1e-4:
+                # Straight line motion
+                x_offsets = t * speed
+                ego_history_xyz[:, :, :, 0] = x_offsets.view(1, 1, -1)
+                # Rotation remains identity
+            else:
+                # Curved motion (Circular Arc)
+                # theta = w * t
+                theta = t * yaw_rate
+                r = speed / yaw_rate
+                
+                # Alpamayo Coordinate System: +X Forward, +Y Left
+                # x(t) = (v/w) * sin(w*t)
+                # y(t) = (v/w) * (1 - cos(w*t))
+                
+                x_offsets = r * torch.sin(theta)
+                y_offsets = r * (1.0 - torch.cos(theta))
+                
+                ego_history_xyz[:, :, :, 0] = x_offsets.view(1, 1, -1)
+                ego_history_xyz[:, :, :, 1] = y_offsets.view(1, 1, -1)
+                
+                # Update Rotation Matrix (Rotation around Z)
+                c = torch.cos(theta).view(1, 1, -1)
+                s = torch.sin(theta).view(1, 1, -1)
+                zeros = torch.zeros_like(c)
+                ones = torch.ones_like(c)
+                
+                # Build rotation matrix per time step
+                # [ cos  -sin   0 ]
+                # [ sin   cos   0 ]
+                # [  0     0    1 ]
+                
+                # We need to assign these to the tensor
+                # Using slicing to broadcast
+                
+                # R[0,0] = cos
+                ego_history_rot[..., 0, 0] = c
+                # R[0,1] = -sin
+                ego_history_rot[..., 0, 1] = -s
+                # R[1,0] = sin
+                ego_history_rot[..., 1, 0] = s
+                # R[1,1] = cos
+                ego_history_rot[..., 1, 1] = c
 
         model_inputs = {
             "tokenized_data": inputs,
@@ -289,8 +318,10 @@ def main():
                 current_context = list(history_buffer)
                 
                 # Get speed for current frame
+                # Get speed for current frame
                 filename = os.path.basename(img_path)
                 current_speed = args.speed
+                current_yaw_rate = 0.0
                 current_telemetry = {}
                 
                 # Check for per-frame telemetry file
@@ -307,10 +338,11 @@ def main():
                                 t_data = json.load(f)
                                 current_telemetry = t_data
                                 current_speed = t_data.get("v_ego", args.speed)
+                                current_yaw_rate = t_data.get("yaw_rate", 0.0)
                         except Exception:
                             pass # Fail silently gracefully to default speed
                 
-                result_data = process_image(model, processor, current_context, args.prompt, args.device, speed=current_speed)
+                result_data = process_image(model, processor, current_context, args.prompt, args.device, speed=current_speed, yaw_rate=current_yaw_rate)
                 
                 if result_data:
                     # Store relative path for portability
