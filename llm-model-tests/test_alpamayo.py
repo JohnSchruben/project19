@@ -230,6 +230,12 @@ def process_image(model, processor, image_paths, prompt, device, speed=0.0, yaw_
                     max_generation_length=512,
                     return_extra=True,
                 )
+        
+        # Debug: Check lateral deviation
+        if pred_xyz.shape[-1] >= 2:
+            lat_dev = pred_xyz[..., 1] # Y coordinate
+            max_lat = torch.max(torch.abs(lat_dev)).item()
+            print(f"DEBUG: Yaw Rate: {yaw_rate:.6f}, Max Lat Dev: {max_lat:.4f}m")
 
         # Extract raw object for reasoning (CoT)
         # extra["cot"] shape: (Batch, Num_Samples) or (Batch, Num_Samples, Sequence)
@@ -409,7 +415,9 @@ def main():
                     base_name = os.path.splitext(filename)[0]
                     frame_idx = int(base_name)
                     
-                    last_ts = current_telemetry.get('timestamp_eof', None)
+                    # Try to get timestamp in seconds if available
+                    last_ts_sec = current_telemetry.get('timestamp_seconds', None)
+                    last_ts_eof = current_telemetry.get('timestamp_eof', None)
                     
                     for t in range(1, 51): # 50 future steps
                         next_idx = frame_idx + t
@@ -433,23 +441,32 @@ def main():
                                         nd = json.load(f)
                                         v_next = nd.get("v_ego", 0.0)
                                         w_next = nd.get("yaw_rate", 0.0)
-                                        next_ts = nd.get("timestamp_eof", None)
                                         
-                                        if last_ts is not None and next_ts is not None:
+                                        next_ts_sec = nd.get("timestamp_seconds", None)
+                                        next_ts_eof = nd.get("timestamp_eof", None)
+                                        
+                                        # Prefer timestamp_seconds (float)
+                                        if last_ts_sec is not None and next_ts_sec is not None:
+                                            dt_step = next_ts_sec - last_ts_sec
+                                            last_ts_sec = next_ts_sec
+                                            # Update fallback too just in case mixture of files
+                                            last_ts_eof = next_ts_eof
+                                        
+                                        # Fallback to timestamp_eof (nanoseconds/int)
+                                        elif last_ts_eof is not None and next_ts_eof is not None:
                                             # Convert nanoseconds/microseconds to seconds
-                                            # Openpilot logs usually use nanoseconds (1e9) or microseconds (1e6)
-                                            # Timestamp generally increases.
-                                            diff = next_ts - last_ts
+                                            diff = next_ts_eof - last_ts_eof
                                             if diff > 1e8: # likely nanoseconds
                                                 dt_step = diff / 1e9
                                             elif diff > 1e5: # likely microseconds
                                                 dt_step = diff / 1e6
                                             
-                                            # Sanity check dt
-                                            if dt_step <= 0 or dt_step > 1.0:
-                                                dt_step = 0.05
+                                            last_ts_eof = next_ts_eof
+                                            
+                                        # Sanity check dt
+                                        if dt_step <= 0 or dt_step > 1.0:
+                                            dt_step = 0.05
                                         
-                                        last_ts = next_ts
                                 except:
                                     pass
                             

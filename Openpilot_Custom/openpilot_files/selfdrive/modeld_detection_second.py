@@ -496,6 +496,7 @@ def main(demo=False):
     telemetry_data = {
         "filename": mid + ".png",
         "timestamp_eof": meta_main.timestamp_eof,
+        "timestamp_seconds": float(meta_main.timestamp_eof) / 1e9,
         "v_ego": float(v_ego),
         "steering_angle_deg": float(sm["carState"].steeringAngleDeg),
         "steering_rate_deg": float(sm["carState"].steeringRateDeg),
