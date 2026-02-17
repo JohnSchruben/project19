@@ -231,21 +231,33 @@ def process_image(model, processor, image_paths, prompt, device, speed=0.0, yaw_
                 )
 
         # Extract raw object for reasoning (CoT)
-        # extra["cot"] shape: (Batch, Num_Samples) or similar
+        # extra["cot"] shape: (Batch, Num_Samples) or (Batch, Num_Samples, Sequence)
         # We'll just take the first sample's reasoning for display
         raw_obj = extra["cot"][0][0]
         
-        # Handle numpy/list wrapping
-        if hasattr(raw_obj, 'item'):
-            raw_obj = raw_obj.item()
-        elif hasattr(raw_obj, 'tolist'):
-            raw_obj = raw_obj.tolist()
+        # Robust string extraction
+        reasoning = ""
+        try:
+            # Convert numpy to python object (list or scalar)
+            if hasattr(raw_obj, 'tolist'):
+                raw_obj = raw_obj.tolist()
             
-        if isinstance(raw_obj, (list, tuple)):
-            if len(raw_obj) > 0:
-                raw_obj = raw_obj[0]
-                
-        reasoning = str(raw_obj)
+            if isinstance(raw_obj, (list, tuple)):
+                # If it's a list, it might be a list of tokens/strings
+                # Join them if they are strings
+                if len(raw_obj) > 0 and isinstance(raw_obj[0], str):
+                    reasoning = "".join(raw_obj)
+                elif len(raw_obj) > 0:
+                     # Maybe list of 1 element which is the string
+                     reasoning = str(raw_obj[0])
+                else:
+                    reasoning = ""
+            else:
+                # Scalar
+                reasoning = str(raw_obj)
+        except Exception as e:
+            print(f"Error parsing reasoning: {e}")
+            reasoning = str(raw_obj)
 
         # Parse out assistant response
         search_term = "<|im_start|>assistant\n"
