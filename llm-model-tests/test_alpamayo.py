@@ -200,9 +200,11 @@ def process_image(model, processor, image_paths, prompt, device, speed=0.0, yaw_
 
         model_inputs = {
             "tokenized_data": inputs,
-            "ego_history_xyz": ego_history_xyz,
-            "ego_history_rot": ego_history_rot,
+            "ego_history_xyz": ego_history_xyz.contiguous(),
+            "ego_history_rot": ego_history_rot.contiguous(),
         }
+        
+        # print(f"DEBUG: xyz shape: {ego_history_xyz.shape}, rot shape: {ego_history_rot.shape}")
         
         model_inputs = helper.to_device(model_inputs, device)
 
@@ -210,6 +212,9 @@ def process_image(model, processor, image_paths, prompt, device, speed=0.0, yaw_
         torch.cuda.manual_seed_all(42)
         autocast_dtype = torch.bfloat16 if device == "cuda" else torch.float32
         
+        if device == "cuda":
+            torch.cuda.synchronize()
+
         with torch.no_grad():
             with torch.autocast(device, dtype=autocast_dtype):
                 pred_xyz, pred_rot, extra = model.sample_trajectories_from_data_with_vlm_rollout(
