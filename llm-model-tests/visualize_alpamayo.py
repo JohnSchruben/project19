@@ -4,12 +4,16 @@ from PIL import Image, ImageTk
 import json
 import os
 import sys
+import matplotlib
+matplotlib.use("TkAgg")
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 class AlpamayoViewer:
     def __init__(self, root, json_path):
         self.root = root
         self.root.title("Alpamayo Results Viewer")
-        self.root.geometry("1400x900")
+        self.root.geometry("1600x900")
         
         self.data = []
         self.current_index = 0
@@ -39,30 +43,50 @@ class AlpamayoViewer:
             sys.exit(1)
 
     def setup_ui(self):
-        # Main layout: Split pane (Image Left, Text Right)
-        self.paned_window = tk.PanedWindow(self.root, orient=tk.HORIZONTAL)
+        # Main layout: Split pane (Image Left, Analysis Right)
+        self.paned_window = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
         self.paned_window.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
         # Left Frame (Image)
         self.image_frame = ttk.Frame(self.paned_window)
-        self.paned_window.add(self.image_frame, weight=1)
+        self.paned_window.add(self.image_frame, weight=3) # More weight to image
         
         self.image_label = ttk.Label(self.image_frame, text="No Image")
         self.image_label.pack(fill=tk.BOTH, expand=True)
         
-        # Right Frame (Text + Controls)
-        self.right_frame = ttk.Frame(self.paned_window)
-        self.paned_window.add(self.right_frame, weight=1)
+        # Right Frame (Text + Plot)
+        self.right_main_frame = ttk.Frame(self.paned_window)
+        self.paned_window.add(self.right_main_frame, weight=2)
         
-        # Text Output
-        self.text_label = ttk.Label(self.right_frame, text="Model Output:", font=("Arial", 12, "bold"))
+        # Split Right Frame vertically: Top=Text, Bottom=Plot
+        self.right_pane = ttk.PanedWindow(self.right_main_frame, orient=tk.VERTICAL)
+        self.right_pane.pack(fill=tk.BOTH, expand=True)
+        
+        # Text Output Frame
+        self.text_frame = ttk.Frame(self.right_pane)
+        self.right_pane.add(self.text_frame, weight=1)
+        
+        self.text_label = ttk.Label(self.text_frame, text="Reasoning:", font=("Arial", 12, "bold"))
         self.text_label.pack(anchor=tk.W, pady=(0, 5))
         
-        self.text_output = tk.Text(self.right_frame, wrap=tk.WORD, font=("Consolas", 11))
+        self.text_output = tk.Text(self.text_frame, wrap=tk.WORD, font=("Consolas", 11), height=15)
         self.text_output.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        # Controls Frame
-        self.controls_frame = ttk.Frame(self.right_frame)
+        # Plot Frame
+        self.plot_frame = ttk.Frame(self.right_pane)
+        self.right_pane.add(self.plot_frame, weight=1)
+        
+        self.plot_label = ttk.Label(self.plot_frame, text="Predicted Trajectory (Top-Down):", font=("Arial", 12, "bold"))
+        self.plot_label.pack(anchor=tk.W, pady=(5, 0))
+        
+        # Matplotlib Figure
+        self.fig = Figure(figsize=(5, 4), dpi=100)
+        self.ax = self.fig.add_subplot(111)
+        self.canvas = FigureCanvasTkAgg(self.fig, master=self.plot_frame)
+        self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        
+        # Controls Frame (at bottom of right main frame)
+        self.controls_frame = ttk.Frame(self.right_main_frame)
         self.controls_frame.pack(fill=tk.X, pady=10)
         
         self.prev_btn = ttk.Button(self.controls_frame, text="<< Previous", command=self.prev_item)
@@ -81,6 +105,7 @@ class AlpamayoViewer:
         item = self.data[self.current_index]
         image_path = item.get("image_path", "")
         reasoning = item.get("reasoning", "")
+        trajectory = item.get("trajectory", [])
         
         # Update Counter
         self.counter_label.config(text=f"Frame {self.current_index + 1} / {len(self.data)}")
@@ -91,6 +116,52 @@ class AlpamayoViewer:
         
         # Update Image
         self.display_image(image_path)
+        
+        # Update Plot
+        self.update_plot(trajectory)
+
+    def update_plot(self, trajectory):
+        self.ax.clear()
+        self.ax.set_title("Vehicle Trajectory (BEV)")
+        self.ax.set_xlabel("Lateral (Y) [m]")
+        self.ax.set_ylabel("Longitudinal (X) [m]")
+        self.ax.grid(True)
+        # Ensure aspect ratio is equal so turns look correct
+        self.ax.set_aspect('equal', adjustable='box')
+        
+        if trajectory and len(trajectory) > 0:
+            # Trajectory is likely list of [x, y, z]
+            # X is usually forward, Y is left/right. 
+            # We want to plot X on vertical axis (Up) and Y on horizontal.
+            
+            xs = [p[0] for p in trajectory] # Forward
+            ys = [p[1] for p in trajectory] # Lateral
+            
+            # Plot
+            self.ax.plot(ys, xs, 'b.-', label='Predicted Path')
+            
+            # Mark start
+            self.ax.plot(ys[0], xs[0], 'go', label='Start')
+            
+            # Invert X axis for Lateral if needed? 
+            # Usually Y positve is Left. So standard plot is fine.
+            # Y=0 is center.
+            
+            # Set limits to make it look like a road snippet
+            # X usually 0 to 50m or 100m. Y usually -10 to 10m.
+            # Let's auto-scale but keep 0,0 visible
+            
+            # Make sure 0,0 is included
+            current_xlim = self.ax.get_xlim()
+            current_ylim = self.ax.get_ylim()
+            
+            # Re-center slightly on 0,0 if needed, but auto-scale is usually fine for trajectory
+            
+            self.ax.legend()
+        else:
+            self.ax.text(0.5, 0.5, "No Trajectory Data", ha='center', va='center')
+        
+        self.canvas.draw()
 
     def display_image(self, rel_path):
         # Combine with current working directory logic if needed, but assuming relative to script execution
@@ -103,7 +174,7 @@ class AlpamayoViewer:
             
             # Resize logic to fit frame
             # Get current frame size
-            frame_width = self.image_frame.winfo_width() or 600
+            frame_width = self.image_frame.winfo_width() or 800
             frame_height = self.image_frame.winfo_height() or 800
             
             # Calculate aspect ratio
@@ -122,7 +193,9 @@ class AlpamayoViewer:
             
             self.image_label.config(image=self.tk_image, text="")
         except Exception as e:
-            self.image_label.config(text=f"Error loading image:\n{e}", image="")
+            # self.image_label.config(text=f"Error loading image:\n{e}", image="")
+            # Fallback for initial load when size is 1x1
+            pass
 
     def next_item(self):
         if self.current_index < len(self.data) - 1:

@@ -131,21 +131,6 @@ def process_image(model, processor, image_path, prompt, device, batch_size=1, nu
                     return_extra=True,
                 )
 
-        # Extract raw object
-        raw_obj = extra["cot"][0][0]
-        
-        # Handle numpy/list wrapping
-        if hasattr(raw_obj, 'item'):
-            raw_obj = raw_obj.item()
-        elif hasattr(raw_obj, 'tolist'):
-            raw_obj = raw_obj.tolist()
-            
-        if isinstance(raw_obj, (list, tuple)):
-            if len(raw_obj) > 0:
-                raw_obj = raw_obj[0]
-                
-        reasoning = str(raw_obj)
-
         # Parse out assistant response
         # The prompt usually follows ChatML format
         search_term = "<|im_start|>assistant\n"
@@ -153,9 +138,22 @@ def process_image(model, processor, image_path, prompt, device, batch_size=1, nu
             reasoning = reasoning.split(search_term)[-1]
         
         # Remove end token
-        reasoning = reasoning.split("<|im_end|>")[0]
+        reasoning = reasoning.split("<|im_end|>")[0].strip()
         
-        return reasoning.strip()
+        # Process Trajectory
+        # pred_xyz shape is likely (batch, samples, time, 3) or similar
+        # We want the first sample's trajectory
+        trajectory = []
+        if pred_xyz is not None:
+            # Assuming batch=1, samples=1
+            # Take the first element
+            traj_tensor = pred_xyz[0][0] # shape (T, 3)
+            trajectory = traj_tensor.float().cpu().numpy().tolist()
+        
+        return {
+            "reasoning": reasoning,
+            "trajectory": trajectory
+        }
 
     except Exception as e:
         print(f"Error processing {image_path}: {e}")
@@ -208,8 +206,8 @@ def main():
         results = []
 
         for img_path in tqdm(image_files, desc="Processing Images"):
-            reasoning = process_image(model, processor, img_path, args.prompt, args.device)
-            if reasoning:
+            result_data = process_image(model, processor, img_path, args.prompt, args.device)
+            if result_data:
                 # Store relative path for portability
                 try:
                     rel_path = os.path.relpath(img_path, start=os.getcwd())
@@ -218,7 +216,8 @@ def main():
 
                 results.append({
                     "image_path": rel_path,
-                    "reasoning": reasoning
+                    "reasoning": result_data["reasoning"],
+                    "trajectory": result_data["trajectory"]
                 })
         
         # Save results
