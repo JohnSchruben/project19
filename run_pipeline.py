@@ -79,7 +79,7 @@ def run_pipeline(args):
     if not modeld_path.is_absolute():
         modeld_path = op_dir / modeld_path
 
-    dataset_dir = Path(args.dataset_dir).expanduser()
+    dataset_dir = Path(args.dataset_dir).expanduser().resolve()
 
     # Check if tools exist
     if not replay_path.exists():
@@ -228,8 +228,8 @@ if __name__ == "__main__":
                         help="Path to replay executable (default: ./tools/replay/replay)")
 
     # Modeld arguments
-    parser.add_argument("--dataset-dir", type=str, default="~/project19/datasets/leaf_run",
-                        help="Directory for modeld output (default: ~/project19/datasets/leaf_run)")
+    parser.add_argument("--dataset-dir", type=str, default="./datasets/leaf_run",
+                        help="Directory for modeld output (default: ./datasets/leaf_run)")
     parser.add_argument("--max-segment", type=int, default=12,
                         help="Max segment for modeld (default: 12)")
     parser.add_argument("--segment-frames", type=int, default=175,
