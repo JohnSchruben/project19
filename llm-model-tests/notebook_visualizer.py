@@ -39,14 +39,24 @@ class NotebookVisualizer:
         self.btn_next = widgets.Button(description="Next >>")
         self.lbl_counter = widgets.Label(value=f"Frame 1 / {len(self.data)}")
         
+        self.slider = widgets.IntSlider(
+            value=0,
+            min=0,
+            max=max(0, len(self.data) - 1),
+            step=1,
+            description='Frame:',
+            continuous_update=False
+        )
+        
         self.btn_prev.on_click(self.on_prev)
         self.btn_next.on_click(self.on_next)
+        self.slider.observe(self.on_slider_change, names='value')
         
-        self.controls = widgets.HBox([self.btn_prev, self.lbl_counter, self.btn_next])
+        self.controls = widgets.HBox([self.btn_prev, self.slider, self.lbl_counter, self.btn_next])
         
         # Output Area for Image and Text
-        # Make image much smaller (150px)
-        self.out_image = widgets.Output(layout=widgets.Layout(width='150px', flex='0 0 auto')) 
+        # Image width doubled to 300px
+        self.out_image = widgets.Output(layout=widgets.Layout(width='300px', flex='0 0 auto')) 
         
         self.out_plot = widgets.Output(layout=widgets.Layout(flex='1 1 auto', width='auto', min_width='400px'))  
         
@@ -54,9 +64,10 @@ class NotebookVisualizer:
         # Use HTML for better text wrapping and formatting
         self.out_text = widgets.HTML(
             value="",
-            layout=widgets.Layout(width='200px', height='400px', overflow='auto')
+            layout=widgets.Layout(width='200px', height='380px', overflow='auto')
         )
-        self.reasoning_box = widgets.VBox([self.lbl_reasoning, self.out_text], layout=widgets.Layout(width='200px', flex='0 0 auto'))
+        self.lbl_telemetry = widgets.Label(value="Telemetry: N/A")
+        self.reasoning_box = widgets.VBox([self.lbl_reasoning, self.out_text, self.lbl_telemetry], layout=widgets.Layout(width='200px', flex='0 0 auto'))
 
         display(self.controls)
         
@@ -78,18 +89,32 @@ class NotebookVisualizer:
             self.current_index += 1
             self.show_current_item()
 
+    def on_slider_change(self, change):
+        self.current_index = change['new']
+        self.show_current_item()
+
     def show_current_item(self):
         if not self.data:
             return
+
+        # Update slider without triggering check loop if needed (observe handles it fine usually)
+        self.slider.value = self.current_index
 
         item = self.data[self.current_index]
         image_path = item.get("image_path", "")
         reasoning = item.get("reasoning", "")
         trajectory = item.get("trajectory", [])
+        speed = item.get("speed", "N/A")
         
         # Update Counter
         self.lbl_counter.value = f"Frame {self.current_index + 1} / {len(self.data)}"
         
+        # Update Telemetry
+        if isinstance(speed, (int, float)):
+            self.lbl_telemetry.value = f"Speed: {speed:.2f} m/s"
+        else:
+            self.lbl_telemetry.value = f"Speed: {speed}"
+
         # Update Text
         # Formatting for readability with HTML
         formatted_text = f"<div style='word-wrap: break-word;'>{reasoning}</div>"
@@ -103,7 +128,7 @@ class NotebookVisualizer:
                     img = Image.open(image_path)
                     # Resize for display uniqueness if needed, or just display
                     # Constrain size width to match widget
-                    img.thumbnail((150, 150))
+                    img.thumbnail((300, 300))
                     display(img)
                 except Exception as e:
                     print(f"Error loading image: {e}")

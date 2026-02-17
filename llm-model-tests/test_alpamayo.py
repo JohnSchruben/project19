@@ -327,6 +327,7 @@ def main():
 
                     results.append({
                         "image_path": rel_path,
+                        "speed": current_speed,
                         "reasoning": result_data["reasoning"],
                         "trajectory": result_data["trajectory"]
                     })
