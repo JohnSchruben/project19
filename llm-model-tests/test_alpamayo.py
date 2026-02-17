@@ -76,19 +76,26 @@ print("Patched torch.cholesky_solve for BFloat16 compatibility.")
 
 import json
 
-def process_image(model, processor, image_path, prompt, device, batch_size=1, num_groups=1, hist_len=10):
+def process_image(model, processor, image_paths, prompt, device, batch_size=1, num_groups=1, hist_len=10):
     try:
-        # Load Image
-        image = Image.open(image_path).convert("RGB")
+        # Load Images
+        # image_paths can be a single string or a list
+        if isinstance(image_paths, str):
+            image_paths = [image_paths]
+            
+        images = []
+        for p in image_paths:
+            images.append(Image.open(p).convert("RGB"))
         
         # Construct message for processor
+        # We interleave images first, then text
+        content = [{"type": "image", "image": img} for img in images]
+        content.append({"type": "text", "text": prompt})
+        
         messages = [
             {
                 "role": "user",
-                "content": [
-                    {"type": "image", "image": image},
-                    {"type": "text", "text": prompt}
-                ]
+                "content": content
             }
         ]
 
@@ -205,6 +212,7 @@ def main():
     print(f"Loading model: {args.model_id}")
     print(f"Device: {args.device}")
 
+    # Run inference
     try:
         # Load Model
         model = AlpamayoR1.from_pretrained(
@@ -235,10 +243,22 @@ def main():
         print(f"Found {len(image_files)} images.")
         
         results = []
+        
+        # History buffer for multi-frame support
+        from collections import deque
+        history_buffer = deque(maxlen=args.history_len)
 
         try:
             for img_path in tqdm(image_files, desc="Processing Images"):
-                result_data = process_image(model, processor, img_path, args.prompt, args.device)
+                # Add current image to history
+                history_buffer.append(img_path)
+                
+                # Pass the full history as list of paths
+                # Convert deque to list
+                current_context = list(history_buffer)
+                
+                result_data = process_image(model, processor, current_context, args.prompt, args.device)
+                
                 if result_data:
                     # Store relative path for portability
                     try:

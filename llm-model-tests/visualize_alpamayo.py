@@ -130,7 +130,6 @@ class AlpamayoViewer:
         self.ax.set_aspect('equal', adjustable='box')
         
         if trajectory and len(trajectory) > 0:
-        if trajectory and len(trajectory) > 0:
             # Recursively flatten until we find the list of points [x, y, z]
             # Data should eventually look like [[x,y,z], [x,y,z], ...]
             # We check if the first element is a list of numbers.
@@ -164,6 +163,22 @@ class AlpamayoViewer:
                 
                 # Mark start
                 self.ax.plot(ys[0], xs[0], 'go', label='Start')
+                
+                # Enforce a minimum lateral width (e.g. +/- 10m) so straight paths don't collapse
+                # Lateral is on X-axis of plot (ys variable)
+                min_lat = min(ys)
+                max_lat = max(ys)
+                buffer = 5.0 # Showing +/- 5m at least
+                center_lat = (min_lat + max_lat) / 2.0
+                
+                self.ax.set_xlim(center_lat - buffer, center_lat + buffer)
+                
+                # Ensure X (Longitudinal, Y-axis of plot) starts at 0 or min
+                # Usually we want to see forward
+                min_long = min(xs)
+                max_long = max(xs)
+                if max_long - min_long < 10.0:
+                    self.ax.set_ylim(min_long - 2.0, min_long + 12.0)
                 
                 self.ax.legend()
             except Exception as e:
