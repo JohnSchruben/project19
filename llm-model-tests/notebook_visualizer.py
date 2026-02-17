@@ -45,20 +45,23 @@ class NotebookVisualizer:
         self.controls = widgets.HBox([self.btn_prev, self.lbl_counter, self.btn_next])
         
         # Output Area for Image and Text
-        self.out_image = widgets.Output() # For the image
-        self.out_plot = widgets.Output()  # For the trajectory plot
+        self.out_image = widgets.Output(layout=widgets.Layout(width='300px', flex='0 0 auto')) 
+        
+        self.out_plot = widgets.Output(layout=widgets.Layout(flex='1 1 auto', width='auto'))  
+        
+        self.lbl_reasoning = widgets.Label(value="Reasoning:")
         self.out_text = widgets.Textarea(
             value="",
             placeholder="Reasoning will appear here...",
-            description="Reasoning:",
             disabled=True,
             layout=widgets.Layout(width='300px', height='400px')
         )
+        self.reasoning_box = widgets.VBox([self.lbl_reasoning, self.out_text], layout=widgets.Layout(flex='0 0 auto'))
 
         display(self.controls)
         
-        # Layout: Image | Plot | Text (Horizontal)
-        self.visuals = widgets.HBox([self.out_image, self.out_plot, self.out_text])
+        # Layout: Image | Text (w/ Label) | Plot (Grid)
+        self.visuals = widgets.HBox([self.out_image, self.reasoning_box, self.out_plot])
         display(self.visuals)
 
     def on_prev(self, b):
@@ -95,8 +98,8 @@ class NotebookVisualizer:
                 try:
                     img = Image.open(image_path)
                     # Resize for display uniqueness if needed, or just display
-                    # Constrain size
-                    img.thumbnail((600, 600))
+                    # Constrain size width to match widget
+                    img.thumbnail((300, 300))
                     display(img)
                 except Exception as e:
                     print(f"Error loading image: {e}")
@@ -140,17 +143,24 @@ class NotebookVisualizer:
                 ax.plot(ys, xs, 'b.-', label='Path')
                 ax.plot(ys[0], xs[0], 'go', label='Start')
                 
-                # Fixed limits
+                # Dynamic limits to show full path
                 min_lat = min(ys)
                 max_lat = max(ys)
-                buffer = 5.0
-                center_lat = (min_lat + max_lat) / 2.0
-                ax.set_xlim(center_lat - buffer, center_lat + buffer)
-                
                 min_long = min(xs)
                 max_long = max(xs)
-                if max_long - min_long < 10.0:
-                    ax.set_ylim(min_long - 2.0, min_long + 12.0)
+                
+                # Enforce minimum width/height to avoid thin lines
+                lat_span = max(10.0, max_lat - min_lat)
+                long_span = max(15.0, max_long - min_long)
+                
+                # Center view
+                center_lat = (min_lat + max_lat) / 2.0
+                center_long = (min_long + max_long) / 2.0
+                
+                # Add buffer
+                buffer = 2.0
+                ax.set_xlim(center_lat - lat_span/2.0 - buffer, center_lat + lat_span/2.0 + buffer)
+                ax.set_ylim(center_long - long_span/2.0 - buffer, center_long + long_span/2.0 + buffer)
                     
                 ax.legend()
             except Exception as e:
