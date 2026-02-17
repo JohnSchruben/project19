@@ -131,9 +131,7 @@ def process_image(model, processor, image_path, prompt, device, batch_size=1, nu
                     return_extra=True,
                 )
 
-        reasoning = extra["cot"][0][0]
-        # print(f"\n--- Output for {os.path.basename(image_path)} ---")
-        # print(reasoning)
+        reasoning = str(extra["cot"][0][0])
         return reasoning
 
     except Exception as e:
