@@ -171,6 +171,7 @@ def process_image(model, processor, image_paths, prompt, device, speed=0.0, yaw_
                 # y(t) = (v/w) * (1 - cos(w*t))
                 
                 # prevent numerical instability if r is too large
+                r = torch.as_tensor(r, device=device)
                 r = torch.clamp(r, min=-10000.0, max=10000.0)
 
                 x_offsets = r * torch.sin(theta)
