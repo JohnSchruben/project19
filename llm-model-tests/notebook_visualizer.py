@@ -45,22 +45,27 @@ class NotebookVisualizer:
         self.controls = widgets.HBox([self.btn_prev, self.lbl_counter, self.btn_next])
         
         # Output Area for Image and Text
-        self.out_image = widgets.Output(layout=widgets.Layout(width='300px', flex='0 0 auto')) 
+        # Make image much smaller (150px)
+        self.out_image = widgets.Output(layout=widgets.Layout(width='150px', flex='0 0 auto')) 
         
-        self.out_plot = widgets.Output(layout=widgets.Layout(flex='1 1 auto', width='auto'))  
+        self.out_plot = widgets.Output(layout=widgets.Layout(flex='1 1 auto', width='auto', min_width='400px'))  
         
         self.lbl_reasoning = widgets.Label(value="Reasoning:")
         # Use HTML for better text wrapping and formatting
         self.out_text = widgets.HTML(
             value="",
-            layout=widgets.Layout(width='300px', height='400px', overflow='auto')
+            layout=widgets.Layout(width='200px', height='400px', overflow='auto')
         )
-        self.reasoning_box = widgets.VBox([self.lbl_reasoning, self.out_text], layout=widgets.Layout(width='300px', flex='0 0 auto'))
+        self.reasoning_box = widgets.VBox([self.lbl_reasoning, self.out_text], layout=widgets.Layout(width='200px', flex='0 0 auto'))
 
         display(self.controls)
         
         # Layout: Image | Text (w/ Label) | Plot (Grid)
-        self.visuals = widgets.HBox([self.out_image, self.reasoning_box, self.out_plot], layout=widgets.Layout(width='100%'))
+        # flex_flow='row' ensures they stay in a row
+        self.visuals = widgets.HBox(
+            [self.out_image, self.reasoning_box, self.out_plot], 
+            layout=widgets.Layout(width='100%', flex_flow='row', align_items='flex-start')
+        )
         display(self.visuals)
 
     def on_prev(self, b):
@@ -98,7 +103,7 @@ class NotebookVisualizer:
                     img = Image.open(image_path)
                     # Resize for display uniqueness if needed, or just display
                     # Constrain size width to match widget
-                    img.thumbnail((300, 300))
+                    img.thumbnail((150, 150))
                     display(img)
                 except Exception as e:
                     print(f"Error loading image: {e}")
@@ -114,12 +119,12 @@ class NotebookVisualizer:
         # Create figure
         # We use 'ioff' to prevent it from displaying automatically outside the widget
         plt.ioff()
-        fig, ax = plt.subplots(figsize=(5, 5))
+        fig, ax = plt.subplots(figsize=(4, 4))
         ax.set_title("Vehicle Trajectory (BEV)")
         ax.set_xlabel("Lateral (Y) [m]")
         ax.set_ylabel("Longitudinal (X) [m]")
         ax.grid(True)
-        ax.set_aspect('equal', adjustable='box')
+        ax.set_aspect('equal', adjustable='datalim')
         
         if trajectory and len(trajectory) > 0:
             # Flatten logic same as visualize_alpamayo.py
