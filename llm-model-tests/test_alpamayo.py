@@ -131,6 +131,21 @@ def process_image(model, processor, image_path, prompt, device, batch_size=1, nu
                     return_extra=True,
                 )
 
+        # Extract raw object
+        raw_obj = extra["cot"][0][0]
+        
+        # Handle numpy/list wrapping
+        if hasattr(raw_obj, 'item'):
+            raw_obj = raw_obj.item()
+        elif hasattr(raw_obj, 'tolist'):
+            raw_obj = raw_obj.tolist()
+            
+        if isinstance(raw_obj, (list, tuple)):
+            if len(raw_obj) > 0:
+                raw_obj = raw_obj[0]
+                
+        reasoning = str(raw_obj)
+
         # Parse out assistant response
         # The prompt usually follows ChatML format
         search_term = "<|im_start|>assistant\n"
