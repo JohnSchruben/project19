@@ -52,15 +52,14 @@ class NotebookVisualizer:
             placeholder="Reasoning will appear here...",
             description="Reasoning:",
             disabled=True,
-            layout=widgets.Layout(width='100%', height='200px')
+            layout=widgets.Layout(width='300px', height='400px')
         )
 
         display(self.controls)
         
-        # Layout: Image Left, Plot Right, Text Bottom
-        self.visuals = widgets.HBox([self.out_image, self.out_plot])
+        # Layout: Image | Plot | Text (Horizontal)
+        self.visuals = widgets.HBox([self.out_image, self.out_plot, self.out_text])
         display(self.visuals)
-        display(self.out_text)
 
     def on_prev(self, b):
         if self.current_index > 0:

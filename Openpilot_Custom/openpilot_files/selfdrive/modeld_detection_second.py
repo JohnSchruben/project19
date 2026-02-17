@@ -11,6 +11,7 @@ if TICI:
 else:
   os.environ['LLVM'] = '1'
 import time
+import json
 import pickle
 import numpy as np
 import cereal.messaging as messaging
@@ -486,6 +487,20 @@ def main(demo=False):
     img_feature_name = os.path.join(feat_dir, mid + ".png")
     bgr = recover_img(buf_main, os.path.join(raw_dir, mid + ".png"))
     img_name = os.path.join(raw_dir, mid + ".png")
+
+    # Log telemetry (speed, steering) for dataset use
+    telemetry_file = os.path.join(seg_dir, "telemetry.jsonl")
+    telemetry_data = {
+        "filename": mid + ".png",
+        "timestamp_eof": meta_main.timestamp_eof,
+        "v_ego": float(v_ego),
+        "steering_angle_deg": float(sm["carState"].steeringAngleDeg),
+        "steering_rate_deg": float(sm["carState"].steeringRateDeg),
+        "yaw_rate": float(sm["carState"].yawRate),
+    }
+    with open(telemetry_file, "a") as f:
+        f.write(json.dumps(telemetry_data) + "\n")
+
     model_output = model.run(buf_main, buf_extra, model_transform_main, model_transform_extra, inputs, prepare_only, file_name1=img_feature_name, file_name2=img_name, bgr=bgr)
     # mt2 = time.perf_counter()
     count += 1

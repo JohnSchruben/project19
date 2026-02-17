@@ -81,7 +81,7 @@ print("Patched torch.cholesky_solve for BFloat16 compatibility.")
 
 import json
 
-def process_image(model, processor, image_paths, prompt, device, batch_size=1, num_groups=1, hist_len=10):
+def process_image(model, processor, image_paths, prompt, device, speed=0.0, batch_size=1, num_groups=1, hist_len=10):
     try:
         # Load Images
         # image_paths can be a single string or a list
@@ -113,10 +113,34 @@ def process_image(model, processor, image_paths, prompt, device, batch_size=1, n
             return_tensors="pt",
         )
         
-        # Prepare inputs with dummy history
+        # Prepare inputs with synthetic history
         # Shape: (Batch, Num_Groups, Hist_Len, 3)
+        # Assuming 10Hz sampling (0.1s per step)
+        dt = 0.1
         ego_history_xyz = torch.zeros((batch_size, num_groups, hist_len, 3), dtype=model.dtype, device=device)
         
+        if speed > 0:
+            # Generate linear backward history: we were at -x before.
+            # Index i: 0 is oldest? Or newest? 
+            # Usually transformers expect chronological order: 0=oldest, -1=newest (current).
+            # Current pos is (0,0,0).
+            # Previous pos (-1) was at (-v*dt, 0, 0).
+            # Oldest pos (0) was at (-(hist_len-1)*v*dt, 0, 0).
+            
+            # Create a sequence of offsets
+            # offsets = [-(hist_len - 1 - i) * dt * speed for i in range(hist_len)]
+            
+            # Implementation using torch
+            steps = torch.arange(hist_len, dtype=model.dtype, device=device) # 0, 1, ..., N-1
+            # We want 0 to be furthest back: -(N-1)
+            # steps - (N-1) gives -(N-1), ..., 0
+            steps = steps - (hist_len - 1)
+            
+            x_offsets = steps * dt * speed
+            
+            # Assign to X channel (0)
+            ego_history_xyz[:, :, :, 0] = x_offsets.view(1, 1, -1)
+            
         # Shape: (Batch, Num_Groups, Hist_Len, 3, 3)
         ego_history_rot = torch.eye(3, dtype=model.dtype, device=device).view(1, 1, 1, 3, 3).repeat(batch_size, num_groups, hist_len, 1, 1)
 
@@ -212,6 +236,7 @@ def main():
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu", help="Device to run on")
     parser.add_argument("--output", type=str, default="alpamayo_results.json", help="Output JSON file")
     parser.add_argument("--history-len", type=int, default=1, help="Number of frames to use as context (including current)")
+    parser.add_argument("--speed", type=float, default=10.0, help="Simulated vehicle speed in m/s (default: 10.0)")
 
     args = parser.parse_args()
 
@@ -248,6 +273,30 @@ def main():
             
         print(f"Found {len(image_files)} images.")
         
+        # Try to load telemetry (speed) if available
+        speed_map = {}
+        telemetry_path = None
+        if os.path.isdir(input_path):
+             # Check if input_path is "raw" folder, then telemetry is in parent
+             norm_path = os.path.normpath(input_path)
+             if os.path.basename(norm_path) == "raw":
+                 telemetry_path = os.path.join(os.path.dirname(norm_path), "telemetry.jsonl")
+             else:
+                 telemetry_path = os.path.join(input_path, "telemetry.jsonl")
+        
+        if telemetry_path and os.path.exists(telemetry_path):
+            print(f"Loading telemetry from {telemetry_path}...")
+            try:
+                with open(telemetry_path, "r") as f:
+                    for line in f:
+                        if line.strip():
+                            data = json.loads(line)
+                            # Map filename to v_ego
+                            speed_map[data["filename"]] = data.get("v_ego", args.speed)
+                print(f"Loaded speed data for {len(speed_map)} frames.")
+            except Exception as e:
+                print(f"Warning: Failed to parse telemetry file: {e}")
+
         results = []
         
         # History buffer for multi-frame support
@@ -263,7 +312,11 @@ def main():
                 # Convert deque to list
                 current_context = list(history_buffer)
                 
-                result_data = process_image(model, processor, current_context, args.prompt, args.device)
+                # Get speed for current frame
+                filename = os.path.basename(img_path)
+                current_speed = speed_map.get(filename, args.speed)
+                
+                result_data = process_image(model, processor, current_context, args.prompt, args.device, speed=current_speed)
                 
                 if result_data:
                     # Store relative path for portability
