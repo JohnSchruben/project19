@@ -169,6 +169,9 @@ def process_image(model, processor, image_paths, prompt, device, speed=0.0, yaw_
                 # x(t) = (v/w) * sin(w*t)
                 # y(t) = (v/w) * (1 - cos(w*t))
                 
+                # prevent numerical instability if r is too large
+                r = torch.clamp(r, min=-10000.0, max=10000.0)
+
                 x_offsets = r * torch.sin(theta)
                 y_offsets = r * (1.0 - torch.cos(theta))
                 
@@ -204,6 +207,7 @@ def process_image(model, processor, image_paths, prompt, device, speed=0.0, yaw_
             "ego_history_rot": ego_history_rot.contiguous(),
         }
         
+        print(f"DEBUG: Processing {image_paths[0] if isinstance(image_paths, list) else image_paths}")
         # print(f"DEBUG: xyz shape: {ego_history_xyz.shape}, rot shape: {ego_history_rot.shape}")
         
         model_inputs = helper.to_device(model_inputs, device)
