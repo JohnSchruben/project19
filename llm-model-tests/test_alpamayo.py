@@ -162,13 +162,24 @@ def process_image(model, processor, image_path, prompt, device, batch_size=1, nu
              # Move to CPU first
             traj_tensor = pred_xyz.float().cpu() # (B, S, T, 3)
             
-            # We want the first batch, first sample -> (T, 3)
-            if traj_tensor.dim() == 4:
-                traj_tensor = traj_tensor[0, 0]
-            elif traj_tensor.dim() == 3: # (S, T, 3) or (1, T, 3)
-                 traj_tensor = traj_tensor[0]
-                 
-            trajectory = traj_tensor.numpy().tolist()
+            # Flatten to (Total_Points, 3) to strictly ensure we have a list of points
+            # We assume we only want the FIRST sample of the FIRST batch.
+            # If shape is (1, 1, T, 3), we want (T, 3).
+            # If shape is (1, S, T, 3), we pick index 0.
+            
+            if traj_tensor.numel() > 0:
+                # Reshape to (-1, 3) to flatten batch/sample dims
+                flat_traj = traj_tensor.reshape(-1, 3)
+                
+                # However, if batch>1 or samples>1, we might merge multiple trajectories if we just flatten.
+                # So we should be careful. 
+                # Let's trust unwrapping by index if we know dimensions.
+                
+                # Safe unwrap:
+                while traj_tensor.dim() > 2:
+                    traj_tensor = traj_tensor[0]
+                    
+                trajectory = traj_tensor.numpy().tolist()
         
         return {
             "reasoning": reasoning,

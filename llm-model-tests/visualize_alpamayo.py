@@ -130,15 +130,31 @@ class AlpamayoViewer:
         self.ax.set_aspect('equal', adjustable='box')
         
         if trajectory and len(trajectory) > 0:
-            # Handle potential extra nesting from JSON (e.g. if shape was (1, T, 3))
-            # If trajectory[0][0] is a list, it means we have [[ [x,y,z], ... ]]
-            if isinstance(trajectory[0], list) and len(trajectory[0]) > 0 and isinstance(trajectory[0][0], list):
-                trajectory = trajectory[0]
-
-            # Trajectory is likely list of [x, y, z]
-            # X is usually forward, Y is left/right. 
-            # We want to plot X on vertical axis (Up) and Y on horizontal.
+        if trajectory and len(trajectory) > 0:
+            # Recursively flatten until we find the list of points [x, y, z]
+            # Data should eventually look like [[x,y,z], [x,y,z], ...]
+            # We check if the first element is a list of numbers.
             
+            # Safety breaking to avoid infinite loops
+            depth_limit = 5
+            curr_depth = 0
+            
+            while isinstance(trajectory, list) and len(trajectory) > 0 and curr_depth < depth_limit:
+                # Check if current level is the list of points
+                first_item = trajectory[0]
+                if isinstance(first_item, list) and len(first_item) == 3 and all(isinstance(x, (int, float)) for x in first_item):
+                    # Found the points!
+                    break
+                
+                # If structure is [[...], [...]] (multiple trajectories?), take first.
+                # If structure is [[...]] (nested), take inner.
+                if isinstance(first_item, list):
+                    trajectory = first_item
+                else:
+                    # Should not happen if we expect lists, unless empty or malformed
+                    break
+                curr_depth += 1
+
             try:
                 xs = [p[0] for p in trajectory] # Forward
                 ys = [p[1] for p in trajectory] # Lateral
