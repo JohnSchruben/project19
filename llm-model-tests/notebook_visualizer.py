@@ -50,18 +50,17 @@ class NotebookVisualizer:
         self.out_plot = widgets.Output(layout=widgets.Layout(flex='1 1 auto', width='auto'))  
         
         self.lbl_reasoning = widgets.Label(value="Reasoning:")
-        self.out_text = widgets.Textarea(
+        # Use HTML for better text wrapping and formatting
+        self.out_text = widgets.HTML(
             value="",
-            placeholder="Reasoning will appear here...",
-            disabled=True,
-            layout=widgets.Layout(width='300px', height='400px')
+            layout=widgets.Layout(width='300px', height='400px', overflow='auto')
         )
-        self.reasoning_box = widgets.VBox([self.lbl_reasoning, self.out_text], layout=widgets.Layout(flex='0 0 auto'))
+        self.reasoning_box = widgets.VBox([self.lbl_reasoning, self.out_text], layout=widgets.Layout(width='300px', flex='0 0 auto'))
 
         display(self.controls)
         
         # Layout: Image | Text (w/ Label) | Plot (Grid)
-        self.visuals = widgets.HBox([self.out_image, self.reasoning_box, self.out_plot])
+        self.visuals = widgets.HBox([self.out_image, self.reasoning_box, self.out_plot], layout=widgets.Layout(width='100%'))
         display(self.visuals)
 
     def on_prev(self, b):
@@ -87,8 +86,8 @@ class NotebookVisualizer:
         self.lbl_counter.value = f"Frame {self.current_index + 1} / {len(self.data)}"
         
         # Update Text
-        # Formatting for readability
-        formatted_text = f"Image: {image_path}\n\n{reasoning}"
+        # Formatting for readability with HTML
+        formatted_text = f"<div style='word-wrap: break-word;'>{reasoning}</div>"
         self.out_text.value = formatted_text
         
         # Update Image
