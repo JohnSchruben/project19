@@ -287,7 +287,7 @@ def main():
     parser.add_argument("--model-id", type=str, default="nvidia/Alpamayo-R1-10B", help="Hugging Face Model ID")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu", help="Device to run on")
     parser.add_argument("--output", type=str, default="alpamayo_results.json", help="Output JSON file")
-    parser.add_argument("--history-len", type=int, default=1, help="Number of frames to use as context (including current)")
+    parser.add_argument("--history-len", type=int, default=16, help="Number of frames to use as context (default: 16)")
     parser.add_argument("--speed", type=float, default=10.0, help="Simulated vehicle speed in m/s (default: 10.0)")
 
     args = parser.parse_args()
