@@ -286,7 +286,6 @@ def main():
                 return_dict=True,
                 return_tensors="pt",
             ).to(device)
-            print(f"DEBUG: Frame {frame_idx}: Chat template applied.")
             
             model_inputs = {
                 "tokenized_data": inputs,
@@ -296,7 +295,6 @@ def main():
             
             with torch.no_grad():
                 with torch.autocast(device, dtype=torch.bfloat16):
-                    print(f"DEBUG: Frame {frame_idx}: Starting sample_trajectories_from_data_with_vlm_rollout...")
                     pred_xyz, pred_rot, extra = model.sample_trajectories_from_data_with_vlm_rollout(
                         data=model_inputs,
                         top_p=0.98,
@@ -305,7 +303,6 @@ def main():
                         max_generation_length=256,
                         return_extra=True,
                     )
-                    print(f"DEBUG: Frame {frame_idx}: Finished sample_trajectories_from_data_with_vlm_rollout.")
             
             reasoning = extra["cot"][0]
             
