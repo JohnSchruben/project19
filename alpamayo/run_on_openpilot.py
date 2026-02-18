@@ -317,8 +317,10 @@ def main():
             if isinstance(reasoning, np.ndarray):
                 reasoning = reasoning.item()
 
+                reasoning = reasoning.item()
+
             result_entry = {
-                "filename": filename,
+                "image_path": img_path,
                 "reasoning": reasoning,
                 "pred_xyz": pred_path,
                 "gt_xyz": gt_path,
@@ -335,10 +337,20 @@ def main():
             print(f"Error inferencing frame {frame_idx}: {e}")
             continue
 
+    # Setup output path
+    output_path = args.output
+    # If using default, point to llm-model-tests relative to script or project
+    if output_path == "results.json":
+          # Assuming we are in project19/alpamayo, move up one level
+          output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "llm-model-tests")
+          if not os.path.exists(output_dir):
+              os.makedirs(output_dir, exist_ok=True)
+          output_path = os.path.join(output_dir, "alpamayo_results.json")
+
     # Save Results
-    with open(args.output, 'w') as f:
+    with open(output_path, 'w') as f:
         json.dump(results, f, indent=2)
-    print(f"Saved results to {args.output}")
+    print(f"Saved results to {output_path}")
 
 if __name__ == "__main__":
     main()
