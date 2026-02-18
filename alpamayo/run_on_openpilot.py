@@ -313,6 +313,10 @@ def main():
             # Get Ground Truth for JSON
             gt_path = data["ego_future_xyz"].float().cpu().numpy()[0, 0, :, :3].tolist()
             
+            # Extract reasoning string from numpy array
+            if isinstance(reasoning, np.ndarray):
+                reasoning = reasoning.item()
+
             result_entry = {
                 "filename": filename,
                 "reasoning": reasoning,
