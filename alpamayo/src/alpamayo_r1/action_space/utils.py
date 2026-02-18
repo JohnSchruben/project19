@@ -234,7 +234,13 @@ def solve_single_constraint(
     # strip off the x_init term
     lhs = ATA + DTD[..., 1:, 1:] + ridge_term
 
-    L = torch.linalg.cholesky(lhs)
+    try:
+        L = torch.linalg.cholesky(lhs)
+    except RuntimeError as e:
+        print(f"DEBUG: solve_single_constraint devices: lhs={lhs.device}, rhs={rhs.device}, x_init={x_init.device}")
+        print(f"DEBUG: ATA={ATA.device}, DTD={DTD.device}, ridge_term={ridge_term.device}")
+        raise e
+
     x = torch.cholesky_solve(rhs.unsqueeze(-1), L).squeeze(-1)  # (..., N)
 
     x = torch.cat([x_init.unsqueeze(-1), x], dim=-1)  # (..., N+1)
@@ -320,6 +326,11 @@ def solve_xs_eq_y(
                 rhs = rhs.to(lhs.dtype)
             L = torch.linalg.cholesky(lhs)
         except RuntimeError as e:
+            if "cholesky" in str(e).lower() and "cpu" in str(e).lower():
+                 pass # Fallthrough to ridge increase
+            elif "expected all tensors" in str(e).lower():
+                 print(f"DEBUG: solve_xs_eq_y devices: lhs={lhs.device}, ridge={ridge_term.device}, ATA={ATA.device}, DTD={DTD.device}")
+                 raise e
             logger.error(f"Error in cholesky decomposition: {e}", exc_info=True)
             ridge *= 10
             logger.warning(f"Resolving singularity using ridge {ridge}")
@@ -413,7 +424,12 @@ def dxy_theta_to_v_without_v0(
     # strip off the x_init term
     lhs = ATA + DTD + ridge_term
 
-    L = torch.linalg.cholesky(lhs)
+    try:
+        L = torch.linalg.cholesky(lhs)
+    except RuntimeError as e:
+        print(f"DEBUG: dxy_theta_to_v_without_v0 devices: lhs={lhs.device}, ATA={ATA.device}, DTD={DTD.device}, ridge={ridge_term.device}")
+        raise e
+
     y = torch.cholesky_solve(rhs.unsqueeze(-1), L).squeeze(-1)  # (..., N+1)
 
     return y.to(orig_dtype)  # (..., N+1)
@@ -506,7 +522,12 @@ def dxy_theta_to_v(
     # strip off the x_init term
     lhs = ATA[..., 1:, 1:] + DTD[..., 1:, 1:] + ridge_term
 
-    L = torch.linalg.cholesky(lhs)
+    try:
+        L = torch.linalg.cholesky(lhs)
+    except RuntimeError as e:
+         print(f"DEBUG: dxy_theta_to_v devices: lhs={lhs.device}, ATA={ATA.device}, DTD={DTD.device}, ridge={ridge_term.device}")
+         raise e
+
     y = torch.cholesky_solve(rhs.unsqueeze(-1), L).squeeze(-1)  # (..., N)
 
     return torch.cat([v0.unsqueeze(-1), y], dim=-1).to(orig_dtype)  # (..., N+1)
