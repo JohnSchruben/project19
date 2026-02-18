@@ -190,6 +190,7 @@ class TrajectoryFusionMixin:
         hist_idx = tokenize_history_trajectory(
             attrs["hist_traj_tokenizer"], traj_data, attrs["hist_token_start_idx"]
         )
+        hist_idx = hist_idx.to(input_ids.device)
         input_ids = replace_pad_token(
             input_ids, hist_idx, attrs["config"].traj_token_ids["history"]
         )
