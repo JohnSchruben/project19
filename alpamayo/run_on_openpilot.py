@@ -290,8 +290,8 @@ def main():
             
             model_inputs = {
                 "tokenized_data": inputs,
-                "ego_history_xyz": data["ego_history_xyz"],
-                "ego_history_rot": data["ego_history_rot"],
+                "ego_history_xyz": data["ego_history_xyz"].to(device),
+                "ego_history_rot": data["ego_history_rot"].to(device),
             }
             
             with torch.no_grad():
