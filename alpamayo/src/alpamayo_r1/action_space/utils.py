@@ -195,11 +195,17 @@ def solve_single_constraint(
     """
     device, dtype = x_target.device, x_target.dtype
     orig_dtype = dtype
+
+    # Ensure inputs are on correct device
+    if w_data is not None:
+         w_data = w_data.to(device)
+
+    # Convert bfloat16 to float32 for solver stability
     if dtype == torch.bfloat16:
         dtype = torch.float32
-        x_target = x_target.to(device=device, dtype=dtype)
+        x_target = x_target.to(dtype)
         if w_data is not None:
-             w_data = w_data.to(device=device, dtype=dtype)
+             w_data = w_data.to(dtype)
 
     *lead, N = x_target.shape
     if N <= 0:
@@ -281,12 +287,18 @@ def solve_xs_eq_y(
     """
     device, dtype = y.device, y.dtype
     orig_dtype = dtype
+
+    # Ensure inputs are on correct device
+    s = s.to(device)
+    if w_data is not None:
+        w_data = w_data.to(device)
+
     if dtype == torch.bfloat16:
         dtype = torch.float32
-        y = y.to(device=device, dtype=dtype)
-        s = s.to(device=device, dtype=dtype)
+        y = y.to(dtype)
+        s = s.to(dtype)
         if w_data is not None:
-            w_data = w_data.to(device=device, dtype=dtype)
+            w_data = w_data.to(dtype)
 
     *lead, N = y.shape
     if w_data is None:
@@ -374,10 +386,14 @@ def dxy_theta_to_v_without_v0(
     *lead, N, _ = dxy.shape
     device, dtype = dxy.device, dxy.dtype
     orig_dtype = dtype
+
+    # Ensure inputs are on correct device
+    theta = theta.to(device)
+
     if dtype == torch.bfloat16:
         dtype = torch.float32
-        dxy = dxy.to(device=device, dtype=dtype)
-        theta = theta.to(device=device, dtype=dtype)
+        dxy = dxy.to(dtype)
+        theta = theta.to(dtype)
 
     g = 2 / dt * dxy  # (..., N, 2)
 
@@ -467,11 +483,16 @@ def dxy_theta_to_v(
     *lead, N, _ = dxy.shape
     device, dtype = dxy.device, dxy.dtype
     orig_dtype = dtype
+
+    # Ensure inputs are on correct device
+    theta = theta.to(device)
+    v0 = v0.to(device)
+
     if dtype == torch.bfloat16:
         dtype = torch.float32
-        dxy = dxy.to(device=device, dtype=dtype)
-        theta = theta.to(device=device, dtype=dtype)
-        v0 = v0.to(device=device, dtype=dtype)
+        dxy = dxy.to(dtype)
+        theta = theta.to(dtype)
+        v0 = v0.to(dtype)
 
     g = 2 / dt * dxy  # (..., N, 2)
 
