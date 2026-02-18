@@ -317,8 +317,6 @@ def main():
             if isinstance(reasoning, np.ndarray):
                 reasoning = reasoning.item()
 
-                reasoning = reasoning.item()
-
             result_entry = {
                 "image_path": img_path,
                 "reasoning": reasoning,
