@@ -161,6 +161,12 @@ class AlpamayoR1(ReasoningVLA):
         }
         input_ids = self.fuse_traj_tokens(input_ids, traj_data_vlm)
         device = input_ids.device
+        print(f"DEBUG: sample_trajectories... input_ids.device={device}")
+        print(f"DEBUG: ego_history_xyz.device={ego_history_xyz.device}")
+        try:
+             print(f"DEBUG: expert.device={self.expert.device}")
+        except:
+             print(f"DEBUG: expert.device parameters={next(self.expert.parameters()).device}")
 
         # 1) run autoregressive generation for the VLM
         max_generation_length = kwargs.get(
@@ -258,6 +264,7 @@ class AlpamayoR1(ReasoningVLA):
         ) -> torch.Tensor:
             # x: (B*, *action_dim)
             # t: broadcastable to x leading dims
+            # print(f"DEBUG: step_fn x={x.device}, t={t.device}")
             b_star = x.shape[0]
             # Project noisy action to expert token embeddings for the n future tokens
             # Expect shape (b*, n_token_per_traj, hidden_size)
