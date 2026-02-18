@@ -238,6 +238,8 @@ def solve_single_constraint(
 
     ridge_term = ridge * torch.eye(N, dtype=dtype, device=device).expand(*lead, N, N)
     # strip off the x_init term
+    if ATA.device != DTD[..., 1:, 1:].device:
+         print(f"DEBUG: solve_single_constraint MISMATCH: ATA={ATA.device}, DTD={DTD.device}, ridge={ridge_term.device}, x_init={x_init.device}")
     lhs = ATA + DTD[..., 1:, 1:] + ridge_term
 
     try:
@@ -332,6 +334,8 @@ def solve_xs_eq_y(
     while L is None:
         try:
             ridge_term = ridge * torch.eye(N, dtype=dtype, device=device).expand(*lead, N, N)
+            if ATA.device != DTD.device:
+                print(f"DEBUG: solve_xs_eq_y MISMATCH: ATA={ATA.device}, DTD={DTD.device}, ridge={ridge_term.device}")
             lhs = ATA + DTD + ridge_term
             # Ensure dtype consistency for torch.compile fake tensor meta pass
             if rhs.dtype != lhs.dtype:
@@ -438,6 +442,8 @@ def dxy_theta_to_v_without_v0(
 
     ridge_term = v_ridge * torch.eye(N + 1, dtype=dtype, device=device).expand(*lead, N + 1, N + 1)
     # strip off the x_init term
+    if ATA.device != DTD.device:
+        print(f"DEBUG: dxy_theta_to_v_without_v0 MISMATCH: ATA={ATA.device}, DTD={DTD.device}, ridge={ridge_term.device}")
     lhs = ATA + DTD + ridge_term
 
     try:
@@ -541,6 +547,8 @@ def dxy_theta_to_v(
 
     ridge_term = v_ridge * torch.eye(N, dtype=dtype, device=device).expand(*lead, N, N)
     # strip off the x_init term
+    if ATA.device != DTD[..., 1:, 1:].device:
+        print(f"DEBUG: dxy_theta_to_v MISMATCH: ATA={ATA.device}, DTD={DTD.device}, ridge={ridge_term.device}")
     lhs = ATA[..., 1:, 1:] + DTD[..., 1:, 1:] + ridge_term
 
     try:
