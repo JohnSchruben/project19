@@ -439,7 +439,7 @@ class ReasoningVLA(PreTrainedModel, TrajectoryFusionMixin):
         """Get the input embeddings of the model."""
         return self.vlm.language_model.embed_tokens
 
-    def tie_weights(self) -> None:
+    def tie_weights(self, **kwargs: Any) -> None:
         """Delegate weight tying to the nested VLM model."""
         if hasattr(self.vlm, "tie_weights"):
-            self.vlm.tie_weights()
+            self.vlm.tie_weights(**kwargs)
