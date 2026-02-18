@@ -194,6 +194,13 @@ def solve_single_constraint(
         x: the solved value.
     """
     device, dtype = x_target.device, x_target.dtype
+    orig_dtype = dtype
+    if dtype == torch.bfloat16:
+        dtype = torch.float32
+        x_target = x_target.to(dtype)
+        if w_data is not None:
+             w_data = w_data.to(dtype)
+
     *lead, N = x_target.shape
     if N <= 0:
         raise ValueError("x_mid must have a positive last-dimension length N.")
@@ -231,7 +238,7 @@ def solve_single_constraint(
     x = torch.cholesky_solve(rhs.unsqueeze(-1), L).squeeze(-1)  # (..., N)
 
     x = torch.cat([x_init.unsqueeze(-1), x], dim=-1)  # (..., N+1)
-    return x
+    return x.to(orig_dtype)
 
 
 @torch.amp.autocast(device_type="cuda", enabled=False)
@@ -267,6 +274,14 @@ def solve_xs_eq_y(
         x: the solved value.
     """
     device, dtype = y.device, y.dtype
+    orig_dtype = dtype
+    if dtype == torch.bfloat16:
+        dtype = torch.float32
+        y = y.to(dtype)
+        s = s.to(dtype)
+        if w_data is not None:
+            w_data = w_data.to(dtype)
+
     *lead, N = y.shape
     if w_data is None:
         w_data = torch.ones_like(y)
@@ -309,7 +324,7 @@ def solve_xs_eq_y(
             ridge *= 10
             logger.warning(f"Resolving singularity using ridge {ridge}")
 
-    return torch.cholesky_solve(rhs.unsqueeze(-1), L).squeeze(-1)  # (..., N)
+    return torch.cholesky_solve(rhs.unsqueeze(-1), L).squeeze(-1).to(orig_dtype)  # (..., N)
 
 
 @torch.no_grad()
@@ -347,6 +362,12 @@ def dxy_theta_to_v_without_v0(
     """
     *lead, N, _ = dxy.shape
     device, dtype = dxy.device, dxy.dtype
+    orig_dtype = dtype
+    if dtype == torch.bfloat16:
+        dtype = torch.float32
+        dxy = dxy.to(dtype)
+        theta = theta.to(dtype)
+
     g = 2 / dt * dxy  # (..., N, 2)
 
     w = torch.ones_like(dxy[..., 0])
@@ -395,7 +416,7 @@ def dxy_theta_to_v_without_v0(
     L = torch.linalg.cholesky(lhs)
     y = torch.cholesky_solve(rhs.unsqueeze(-1), L).squeeze(-1)  # (..., N+1)
 
-    return y  # (..., N+1)
+    return y.to(orig_dtype)  # (..., N+1)
 
 
 @torch.no_grad()
@@ -429,6 +450,13 @@ def dxy_theta_to_v(
     """
     *lead, N, _ = dxy.shape
     device, dtype = dxy.device, dxy.dtype
+    orig_dtype = dtype
+    if dtype == torch.bfloat16:
+        dtype = torch.float32
+        dxy = dxy.to(dtype)
+        theta = theta.to(dtype)
+        v0 = v0.to(dtype)
+
     g = 2 / dt * dxy  # (..., N, 2)
 
     w = torch.ones_like(dxy[..., 0])
@@ -481,7 +509,7 @@ def dxy_theta_to_v(
     L = torch.linalg.cholesky(lhs)
     y = torch.cholesky_solve(rhs.unsqueeze(-1), L).squeeze(-1)  # (..., N)
 
-    return torch.cat([v0.unsqueeze(-1), y], dim=-1)  # (..., N+1)
+    return torch.cat([v0.unsqueeze(-1), y], dim=-1).to(orig_dtype)  # (..., N+1)
 
 
 @torch.no_grad()
