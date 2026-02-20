@@ -20,7 +20,7 @@ def load_openpilot_data(
     segment_dir: str,
     frame_idx: int,
     num_history_steps: int = 16, # Kinematic history length (must align with model config)
-    num_future_steps: int = 64,  # GT future length
+    num_future_steps: int = 4,  # GT future length
     time_step: float = 0.1,      # Assumed dt if timestamps missing
     device: str = "cuda"
 ):
@@ -262,7 +262,7 @@ def main():
         # We try to load history. If beginning of segment, history might be partial (padded with first frame/zeros).
         # Our load_openpilot_data handles clamping to 0.
         try:
-            data = load_openpilot_data(segment_dir, frame_idx, num_history_steps=16, device=device)
+            data = load_openpilot_data(segment_dir, frame_idx, num_history_steps=16, num_future_steps=4, device=device)
         except Exception as e:
             print(f"Error loading data for frame {frame_idx}: {e}")
             continue
