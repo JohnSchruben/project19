@@ -96,7 +96,7 @@ def run_pipeline(args):
     modeld_env["PYTHONPATH"] = f"{op_dir}:{modeld_env.get('PYTHONPATH', '')}"
 
     # Construct commands
-    replay_cmd = [str(replay_path), args.route] + args.replay_flags.split()
+    replay_cmd = [str(replay_path), args.route, "--no-loop"] + args.replay_flags.split()
     
     # Helper to construct modeld cmd manually since we removed args.python_cmd
     cmd = []
