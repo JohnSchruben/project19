@@ -14,20 +14,20 @@ def load_custom_dataset(
     frame_idx: int,
     num_history_steps: int = 16, # Kinematic history length
     num_future_steps: int = 64,  # GT future length
-    time_step: float = 0.1,      # Assumed dt
+    time_step: float = 0.05,      # framerate, 20 hz
 ):
     """
     Loads custom openpilot-style data and converts to Alpamayo format.
     Expects segment_dir to contain:
       - raw/ (containing .png images named like 000000.png)
-      - telemetry/ (containing .json files named like 000000.json with v_ego, yaw_rate, steering_angle_deg, etc.)
+      - telemetry/ (containing .json files named like 000000.json with v_ego, yaw_rate, steering_angle_deg)
     """
     
     raw_dir = os.path.join(segment_dir, "raw")
     telemetry_dir = os.path.join(segment_dir, "telemetry")
     
     # 1. Kinematic Integration (History & Future)
-    # We start at t0 (frame_idx) as Origin (0,0,0, identity rot).
+    # start at t0 (frame_idx) as Origin (0,0,0, identity rot).
     
     # History Integration (Backwards from t0)
     hist_xyz = []
@@ -170,13 +170,12 @@ def load_custom_dataset(
     }
 
 # ---
-# How to use this snippet in your notebook:
+# How to use
 # ---
-
 if __name__ == "__main__":
     # Example usage:
-    segment_dir = "../dataset/route_1/segment_00" # path relative to notebook
-    frame_idx = 100 # Change this to select the image index you want to predict from
+    segment_dir = "../../datasets/route_1/segment_00" # path relative to notebook
+    frame_idx = 100 
     
     # data = load_custom_dataset(segment_dir, frame_idx)
     #
