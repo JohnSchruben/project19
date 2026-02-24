@@ -35,7 +35,7 @@ Test real-time performance constraints (20 FPS requirement):
 ```bash
 
 # Install benchmark dependencies
-pip instal psutil GPUtil
+pip install psutil GPUtil
 
 # Run benchmark on all models
 python benchmark.py
@@ -44,4 +44,4 @@ python benchmark.py
 python test_performance.py
 ```
 
-Restults saved to 'benchmarks/' folder
+Results saved to 'benchmarks/' folder
