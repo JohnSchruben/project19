@@ -1,0 +1,31 @@
+[
+  {
+    "model": "minicpm-v",
+    "image": "car-on-road-3.jpg",
+    "iterations": 10,
+    "success_count": 10,
+    "error_count": 0,
+    "timestamp": "2026-02-23T13:28:04.376996",
+    "preprocessing_mean_ms": 53.849200007971376,
+    "preprocessing_p95_ms": 79.09740007016808,
+    "inference_min_ms": 12299.60399994161,
+    "inference_max_ms": 115455.17810003366,
+    "inference_mean_ms": 25629.88919999916,
+    "inference_p95_ms": 115455.17810003366,
+    "inference_p99_ms": 115455.17810003366,
+    "postprocessing_mean_ms": 0.013280007988214493,
+    "postprocessing_p95_ms": 0.01780001912266016,
+    "total_min_ms": 12344.468399998732,
+    "total_max_ms": 115510.55070001166,
+    "total_mean_ms": 25683.75168001512,
+    "total_p95_ms": 115510.55070001166,
+    "total_p99_ms": 115510.55070001166,
+    "fps": 0.03893512180224487,
+    "cpu_percent": 10.2,
+    "memory_mb": 58.03515625,
+    "gpu_percent": 0.0,
+    "gpu_memory_mb": 0.0,
+    "meets_20fps_requirement": false,
+    "meets_50ms_requirement": false
+  }
+]
