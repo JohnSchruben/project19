@@ -10,6 +10,7 @@ import tkinter as tk
 from tkinter import ttk
 import tkinter.filedialog as filedialog
 from PIL import Image
+import cv2
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'src/alpamayo_r1')))
 from load_custom_dataset import load_custom_dataset
@@ -43,6 +44,10 @@ class GTVisualizerApp:
         top_frame.pack(side=tk.TOP, fill=tk.X, padx=10, pady=5)
         
         ttk.Button(top_frame, text="Select Route", command=self.select_route).pack(side=tk.LEFT, padx=5)
+        
+        self.btn_export = ttk.Button(top_frame, text="Export MP4", command=self.export_video, state=tk.DISABLED)
+        self.btn_export.pack(side=tk.LEFT, padx=5)
+        
         self.lbl_segments = ttk.Label(top_frame, text="Loaded Segments: 0 | Total Frames: 0")
         self.lbl_segments.pack(side=tk.LEFT, padx=20)
         
@@ -87,6 +92,12 @@ class GTVisualizerApp:
             
         if hasattr(self, 'lbl_segments'):
             self.lbl_segments.config(text=f"Loaded Segments: {len(self.segment_dirs)} | Total Frames: {self.num_total_frames}")
+            
+        if hasattr(self, 'btn_export'):
+            if self.num_total_frames > 0:
+                self.btn_export.config(state=tk.NORMAL)
+            else:
+                self.btn_export.config(state=tk.DISABLED)
 
     def select_route(self):
         initial_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'datasets'))
@@ -458,6 +469,95 @@ class GTVisualizerApp:
         
         self.fig_telem.subplots_adjust(hspace=0.4, wspace=0.3, left=0.08, right=0.95, top=0.9, bottom=0.1)
         self.canvas_telem.draw()
+
+    def export_video(self):
+        if not self.segment_dirs: return
+        
+        save_path = filedialog.asksaveasfilename(
+            defaultextension=".mp4",
+            filetypes=[("MP4 Video", "*.mp4")],
+            title="Save Export MP4"
+        )
+        if not save_path:
+            return
+            
+        self.btn_export.config(state=tk.DISABLED)
+        self.lbl_status.config(text="Exporting MP4... Please Wait...")
+        self.root.update()
+        
+        # We will use an off-screen layout for drawing the overlay
+        fig_export = plt.figure(figsize=(4, 4), dpi=100)
+        ax_export = fig_export.add_subplot(111)
+        
+        out = None
+        overlay_size = (300, 300)
+        
+        for g_idx in range(self.num_total_frames):
+            img_np, v_ego, yaw_rate, steer = self.get_frame_data(g_idx)
+            seg_dir, local_idx = self.map_global_to_local(g_idx)
+            
+            data = None
+            if seg_dir:
+                 try:
+                     data = load_custom_dataset(segment_dir=seg_dir, frame_idx=local_idx, num_future_steps=self.num_frames)
+                 except Exception:
+                     pass
+                     
+            if out is None:
+                h, w, _ = img_np.shape
+                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                out = cv2.VideoWriter(save_path, fourcc, 20.0, (w, h))
+
+            ax_export.clear()
+            if data is not None:
+                future_xyz = data["ego_future_xyz"][0, 0].numpy()
+                x_forward = np.concatenate(([0.0], future_xyz[:self.num_frames, 0]))
+                y_left = np.concatenate(([0.0], future_xyz[:self.num_frames, 1]))
+                
+                ax_export.plot([-y for y in y_left], x_forward, marker='o', color='blue', linewidth=2)
+                ax_export.plot(0, 0, marker='*', color='red', markersize=15)
+                
+            ax_export.set_aspect('equal') # Square aspect
+            cur_xlim = ax_export.get_xlim()
+            cur_ylim = ax_export.get_ylim()
+            # dynamically resize bounds
+            max_range = max(cur_xlim[1]-cur_xlim[0], cur_ylim[1]-cur_ylim[0], 10.0) / 2.0
+            x_c = (cur_xlim[1]+cur_xlim[0]) / 2.0
+            y_c = (cur_ylim[1]+cur_ylim[0]) / 2.0
+            ax_export.set_xlim(x_c - max_range, x_c + max_range)
+            ax_export.set_ylim(y_c - max_range, y_c + max_range)
+            ax_export.axis('off') # Hide axes
+            fig_export.canvas.draw()
+            rgba = np.asarray(fig_export.canvas.buffer_rgba())
+            overlay = rgba[:, :, :3].copy()
+            
+            overlay = cv2.resize(overlay, overlay_size)
+            
+            # Alpha blend white background
+            gray = cv2.cvtColor(overlay, cv2.COLOR_RGB2GRAY)
+            mask = cv2.threshold(gray, 240, 255, cv2.THRESH_BINARY_INV)[1]
+            
+            h, w, _ = img_np.shape
+            roi = img_np[h-overlay_size[1]:h, w-overlay_size[0]:w]
+            
+            bg = cv2.bitwise_and(roi, roi, mask=cv2.bitwise_not(mask))
+            fg = cv2.bitwise_and(overlay, overlay, mask=mask)
+            img_np[h-overlay_size[1]:h, w-overlay_size[0]:w] = cv2.add(bg, fg)
+            
+            out.write(cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR))
+            
+            if g_idx % 20 == 0:
+                self.lbl_status.config(text=f"Exporting MP4... {g_idx}/{self.num_total_frames} Frames")
+                self.root.update()
+                
+        if out is not None:
+             out.release()
+             
+        plt.close(fig_export)
+        self.btn_export.config(state=tk.NORMAL)
+        self.lbl_status.config(text=f"Export Completed: {os.path.basename(save_path)}")
+        self.root.update()
+
 
 def get_default_route():
     base_dir = os.path.join(os.path.dirname(__file__), '..', 'datasets')
