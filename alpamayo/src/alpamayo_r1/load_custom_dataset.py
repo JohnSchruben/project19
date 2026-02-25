@@ -73,7 +73,7 @@ def load_custom_dataset(
                 # Yaw Rate Fallback (Bicycle Model)
                 if abs(yaw_rate) < 1e-4 and abs(steer_deg) > 0.5:
                      steer_rad = np.deg2rad(steer_deg) / 15.49
-                     yaw_rate = - (abs(v) * np.tan(steer_rad) / 2.7)
+                     yaw_rate = v * np.tan(steer_rad) / 2.7
                 
                 w = yaw_rate
         
@@ -130,7 +130,7 @@ def load_custom_dataset(
 
                 if abs(yaw_rate) < 1e-4 and abs(steer_deg) > 0.5:
                      steer_rad = np.deg2rad(steer_deg) / 15.49
-                     yaw_rate = - (abs(v) * np.tan(steer_rad) / 2.7)
+                     yaw_rate = v * np.tan(steer_rad) / 2.7
                 w = yaw_rate
                 
         if is_reverse:

@@ -306,7 +306,7 @@ class GTVisualizerApp:
         x_forward = np.concatenate(([0.0], future_xyz[:self.num_frames, 0]))
         y_left = np.concatenate(([0.0], future_xyz[:self.num_frames, 1]))
         
-        ax_graph.plot(y_left, x_forward, marker='o', color='blue', label='Ground Truth Trajectory')
+        ax_graph.plot([-y for y in y_left], x_forward, marker='o', color='blue', label='Ground Truth Trajectory')
         ax_graph.plot(0, 0, marker='*', color='red', markersize=15, label='Ego Vehicle')
         ax_graph.set_title(f"Next {self.num_frames} Frames (GT)", fontsize=24)
         ax_graph.set_xlabel("Lateral Displacement", fontsize=20)
@@ -387,7 +387,7 @@ class GTVisualizerApp:
                     
                     if abs(yaw_rate) < 1e-4 and abs(steer_deg) > 0.5:
                         steer_rad = np.deg2rad(steer_deg) / 15.49
-                        yaw_rate = - (abs(v) * np.tan(steer_rad) / 2.7)
+                        yaw_rate = v * np.tan(steer_rad) / 2.7
                         
                 x += v * np.cos(theta) * dt
                 y += v * np.sin(theta) * dt
@@ -405,9 +405,9 @@ class GTVisualizerApp:
                 time_list.append(curr_time)
                 curr_time += dt
                 
-        self.ax_full.plot(path_y, path_x, color='green', linewidth=2, label="Full Trajectory")
+        self.ax_full.plot([-py for py in path_y], path_x, color='green', linewidth=2, label="Full Trajectory")
         self.ax_full.plot(0, 0, marker='*', color='red', markersize=15, label='Start')
-        self.ax_full.plot(path_y[-1], path_x[-1], marker='o', color='black', markersize=8, label='End')
+        self.ax_full.plot(-path_y[-1], path_x[-1], marker='o', color='black', markersize=8, label='End')
         
         self.ax_full.set_title(f"Full Integration ({self.num_total_frames} frames)", fontsize=24)
         self.ax_full.set_xlabel("Lateral Displacement", fontsize=20)
