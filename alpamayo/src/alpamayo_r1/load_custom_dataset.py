@@ -12,9 +12,10 @@ from PIL import Image
 def load_custom_dataset(
     segment_dir: str,
     frame_idx: int,
-    num_history_steps: int = 16, # Kinematic history length
-    num_future_steps: int = 64,  # GT future length
-    time_step: float = 0.05,      # framerate, 20 hz
+    num_history_steps: int = 16, # Kinematic history length at 10Hz
+    num_future_steps: int = 64,  # GT future length at 10Hz
+    time_step: float = 0.1,      # Target framerate matching Alpamayo (10Hz)
+    frame_stride: int = 2,       # Source dataset stride (Openpilot is 20Hz, so stride 2 = 10Hz)
 ):
     """
     Loads custom openpilot-style data and converts to Alpamayo format.
@@ -47,13 +48,14 @@ def load_custom_dataset(
     
     # Iterate backwards
     for i in range(1, num_history_steps):
-        prev_idx = frame_idx - i
+        prev_idx = frame_idx - (i * frame_stride)
         if prev_idx < 0: prev_idx = 0 # Clamp to start
         
         json_path = os.path.join(telemetry_dir, f"{prev_idx:06d}.json")
         v = 0.0
         w = 0.0
         dt = time_step
+        is_reverse = False
         
         if os.path.exists(json_path):
             with open(json_path, 'r') as f:
@@ -62,7 +64,6 @@ def load_custom_dataset(
                 yaw_rate = data.get('yaw_rate', 0.0)
                 steer_deg = data.get('steering_angle_deg', 0.0)
                 is_reverse = data.get('gear_shifter') == 'reverse'
-                steer_deg = data.get('steering_angle_deg', 0.0)
                 
                 # Dynamic dt calculation
                 t_prev_us = data.get('timestamp_eof', 0) / 1000
@@ -109,11 +110,12 @@ def load_custom_dataset(
     x, y, theta = 0.0, 0.0, 0.0 # Reset to t0
     
     for i in range(1, num_future_steps + 1):
-        next_idx = frame_idx + i
+        next_idx = frame_idx + (i * frame_stride)
         json_path = os.path.join(telemetry_dir, f"{next_idx:06d}.json")
         v = 0.0
         w = 0.0
         dt = time_step
+        is_reverse = False
         
         if os.path.exists(json_path):
              with open(json_path, 'r') as f:
@@ -160,10 +162,10 @@ def load_custom_dataset(
     num_visual_frames = 4 # Default in load_physical_aiavdataset
     images = []
     
-    # Indices for visual frames: [t-3, t-2, t-1, t0]
+    # Indices for visual frames
     for i in range(num_visual_frames):
-        # Index: frame_idx - (3 - i)
-        idx = frame_idx - (num_visual_frames - 1 - i)
+        # Index: frame_idx - (3 - i) * stride
+        idx = frame_idx - (num_visual_frames - 1 - i) * frame_stride
         if idx < 0: idx = 0
         img_path = os.path.join(raw_dir, f"{idx:06d}.png")
         if os.path.exists(img_path):
