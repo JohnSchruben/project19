@@ -493,14 +493,28 @@ def main(demo=False):
     os.makedirs(tel_dir, exist_ok=True)
     telemetry_file = os.path.join(tel_dir, mid + ".json")
     
+    car_state = sm["carState"]
     telemetry_data = {
         "filename": mid + ".png",
         "timestamp_eof": meta_main.timestamp_eof,
         "timestamp_seconds": float(meta_main.timestamp_eof) / 1e9,
         "v_ego": float(v_ego),
-        "steering_angle_deg": float(sm["carState"].steeringAngleDeg),
-        "steering_rate_deg": float(sm["carState"].steeringRateDeg),
-        "yaw_rate": float(sm["carState"].yawRate),
+        "a_ego": float(car_state.aEgo),
+        "steering_angle_deg": float(car_state.steeringAngleDeg),
+        "steering_rate_deg": float(car_state.steeringRateDeg),
+        "steering_torque": float(car_state.steeringTorque),
+        "steering_pressed": bool(car_state.steeringPressed),
+        "yaw_rate": float(car_state.yawRate),
+        "gas": float(car_state.gas),
+        "gas_pressed": bool(car_state.gasPressed),
+        "brake": float(car_state.brake),
+        "brake_pressed": bool(car_state.brakePressed),
+        "wheel_speeds": {
+            "fl": float(car_state.wheelSpeeds.fl),
+            "fr": float(car_state.wheelSpeeds.fr),
+            "rl": float(car_state.wheelSpeeds.rl),
+            "rr": float(car_state.wheelSpeeds.rr),
+        }
     }
     with open(telemetry_file, "w") as f:
         json.dump(telemetry_data, f, indent=2)

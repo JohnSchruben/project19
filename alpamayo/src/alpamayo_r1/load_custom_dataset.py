@@ -62,9 +62,15 @@ def load_custom_dataset(
                 yaw_rate = data.get('yaw_rate', 0.0)
                 steer_deg = data.get('steering_angle_deg', 0.0)
                 
+                # Dynamic dt calculation
+                t_prev_us = data.get('timestamp_eof', 0) / 1000
+                if t0_us > 0 and t_prev_us > 0:
+                    dt = (t0_us - t_prev_us) / 1000000.0 / i # approximate avg dt
+                
+                
                 # Yaw Rate Fallback (Bicycle Model)
                 if abs(yaw_rate) < 1e-4 and abs(steer_deg) > 0.5:
-                     steer_rad = np.deg2rad(steer_deg) / 16.0
+                     steer_rad = np.deg2rad(steer_deg) / 15.49
                      yaw_rate = v * np.tan(steer_rad) / 2.7
                 
                 w = yaw_rate
@@ -108,8 +114,14 @@ def load_custom_dataset(
                 v = data.get('v_ego', 0.0)
                 yaw_rate = data.get('yaw_rate', 0.0)
                 steer_deg = data.get('steering_angle_deg', 0.0)
+                
+                # Dynamic dt calculation
+                t_next_us = data.get('timestamp_eof', 0) / 1000
+                if t0_us > 0 and t_next_us > 0:
+                    dt = (t_next_us - t0_us) / 1000000.0 / i # approximate avg dt
+
                 if abs(yaw_rate) < 1e-4 and abs(steer_deg) > 0.5:
-                     steer_rad = np.deg2rad(steer_deg) / 16.0
+                     steer_rad = np.deg2rad(steer_deg) / 15.49
                      yaw_rate = v * np.tan(steer_rad) / 2.7
                 w = yaw_rate
                 
