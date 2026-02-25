@@ -15,17 +15,15 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'src/alp
 from load_custom_dataset import load_custom_dataset
 
 class GTVisualizerApp:
-    def __init__(self, root, segment_dirs=None, initial_frames=4):
+    def __init__(self, root, route_dir=None, initial_frames=4):
         self.root = root
         self.root.title("Ground Truth Visualizer")
         self.root.geometry("1400x900")
         
-        if segment_dirs is None:
-            self.segment_dirs = []
-        elif isinstance(segment_dirs, str):
-            self.segment_dirs = [segment_dirs]
-        else:
-            self.segment_dirs = list(segment_dirs)
+        self.route_dir = route_dir
+        self.all_segments = []
+        self.segment_vars = []
+        self.segment_dirs = []
             
         self.segment_lens = []
         self.num_total_frames = 0
@@ -44,10 +42,13 @@ class GTVisualizerApp:
         top_frame = ttk.Frame(root)
         top_frame.pack(side=tk.TOP, fill=tk.X, padx=10, pady=5)
         
-        ttk.Button(top_frame, text="Add Segment", command=self.add_segment).pack(side=tk.LEFT, padx=5)
-        ttk.Button(top_frame, text="Clear Segments", command=self.clear_segments).pack(side=tk.LEFT, padx=5)
+        ttk.Button(top_frame, text="Select Route", command=self.select_route).pack(side=tk.LEFT, padx=5)
         self.lbl_segments = ttk.Label(top_frame, text="Loaded Segments: 0 | Total Frames: 0")
         self.lbl_segments.pack(side=tk.LEFT, padx=20)
+        
+        # Checkbox panel
+        self.chk_frame_container = ttk.Frame(root)
+        self.chk_frame_container.pack(side=tk.TOP, fill=tk.X, padx=10, pady=5)
         
         # Tabs
         self.notebook = ttk.Notebook(root)
@@ -65,7 +66,8 @@ class GTVisualizerApp:
         self.setup_full_tab()
         self.setup_telemetry_tab()
         
-        self.load_segments_data()
+        if self.route_dir:
+            self.load_route(self.route_dir)
         
     def load_segments_data(self):
         self.segment_lens = []
@@ -86,18 +88,47 @@ class GTVisualizerApp:
         if hasattr(self, 'lbl_segments'):
             self.lbl_segments.config(text=f"Loaded Segments: {len(self.segment_dirs)} | Total Frames: {self.num_total_frames}")
 
-    def add_segment(self):
-        folder = filedialog.askdirectory(title="Select Segment Directory")
+    def select_route(self):
+        initial_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'datasets'))
+        folder = filedialog.askdirectory(title="Select Route Directory", initialdir=initial_dir)
         if folder:
-            self.segment_dirs.append(folder)
-            self.load_segments_data()
-            self.plot_full_path_and_telemetry()
-            self.update_seq_display()
+            self.load_route(folder)
             
-    def clear_segments(self):
-        self.segment_dirs = []
-        self.load_segments_data()
+    def load_route(self, route_dir):
+        self.route_dir = route_dir
+        self.all_segments = sorted([d for d in glob.glob(os.path.join(self.route_dir, 'segment_*')) if os.path.isdir(d)])
+        self.segment_vars = [tk.BooleanVar(value=(i == 0)) for i in range(len(self.all_segments))]
+        self.update_checkbox_ui()
+        self.on_segment_toggled()
+        
+    def update_checkbox_ui(self):
+        for widget in self.chk_frame_container.winfo_children():
+            widget.destroy()
+            
+        ttk.Label(self.chk_frame_container, text="Toggle Segments:").pack(side=tk.LEFT, padx=5)
+        ttk.Button(self.chk_frame_container, text="All", command=self.check_all).pack(side=tk.LEFT, padx=2)
+        ttk.Button(self.chk_frame_container, text="None", command=self.uncheck_all).pack(side=tk.LEFT, padx=2)
+        
+        chk_inner = tk.Frame(self.chk_frame_container)
+        chk_inner.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=10)
+        
+        for i, (seg, var) in enumerate(zip(self.all_segments, self.segment_vars)):
+            name = os.path.basename(seg)
+            cb = tk.Checkbutton(chk_inner, text=name, variable=var, command=self.on_segment_toggled, font=('Helvetica', 24))
+            cb.grid(row=i//10, column=i%10, sticky='w', padx=10, pady=5)
+            
+    def check_all(self):
+        for var in self.segment_vars: var.set(True)
+        self.on_segment_toggled()
+        
+    def uncheck_all(self):
+        for var in self.segment_vars: var.set(False)
+        self.on_segment_toggled()
+        
+    def on_segment_toggled(self):
+        self.segment_dirs = [s for s, v in zip(self.all_segments, self.segment_vars) if v.get()]
         self.frame_idx = 0
+        self.load_segments_data()
         self.plot_full_path_and_telemetry()
         self.update_seq_display()
 
@@ -136,6 +167,23 @@ class GTVisualizerApp:
                                      variable=self.slider_var, command=self.on_slider_moved, length=300)
         self.slider_frame.pack(side=tk.LEFT, padx=20, fill=tk.X, expand=True)
         
+        def on_slider_click(event):
+            part = self.slider_frame.identify(event.x, event.y)
+            if part in ('trough1', 'trough2'):
+                min_val = self.slider_frame.cget("from")
+                max_val = self.slider_frame.cget("to")
+                width = self.slider_frame.winfo_width()
+                pad = 16
+                clickable_width = width - 2 * pad
+                x = max(0, min(event.x - pad, clickable_width))
+                if clickable_width > 0:
+                    val = min_val + (x / clickable_width) * (max_val - min_val)
+                    self.slider_var.set(int(val))
+                    self.on_slider_moved(val)
+                return "break"
+
+        self.slider_frame.bind("<Button-1>", on_slider_click)
+        
         self.lbl_status = ttk.Label(ctrl_frame, text="")
         self.lbl_status.pack(side=tk.LEFT, padx=20)
         
@@ -151,7 +199,7 @@ class GTVisualizerApp:
         self.canvas_full.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         
     def setup_telemetry_tab(self):
-        self.fig_telem, (self.ax_v, self.ax_steer) = plt.subplots(2, 1, figsize=(10, 8))
+        self.fig_telem, ((self.ax_v, self.ax_steer), (self.ax_accel, self.ax_pedal)) = plt.subplots(2, 2, figsize=(12, 10))
         self.canvas_telem = FigureCanvasTkAgg(self.fig_telem, master=self.tab_telemetry)
         self.canvas_telem.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         
@@ -279,6 +327,8 @@ class GTVisualizerApp:
         self.ax_full.clear()
         self.ax_v.clear()
         self.ax_steer.clear()
+        self.ax_accel.clear()
+        self.ax_pedal.clear()
         
         if not self.segment_dirs:
             self.canvas_full.draw()
@@ -291,6 +341,9 @@ class GTVisualizerApp:
         
         v_ego_list = []
         steer_list = []
+        a_ego_list = []
+        gas_list = []
+        brake_list = []
         time_list = []
         curr_time = 0.0
         
@@ -312,6 +365,10 @@ class GTVisualizerApp:
                     steer_deg = data.get('steering_angle_deg', 0.0)
                     cur_t = data.get('timestamp_eof', 0) / 1000
                     
+                    a_ego = data.get('a_ego', 0.0)
+                    gas = data.get('gas', 0.0)
+                    brake = data.get('brake', 0.0)
+                    
                     dt = dt_default
                     if prev_t > 0 and cur_t > 0:
                         dt = (cur_t - prev_t) / 1000000.0
@@ -330,6 +387,9 @@ class GTVisualizerApp:
                 
                 v_ego_list.append(v)
                 steer_list.append(steer_deg)
+                a_ego_list.append(a_ego)
+                gas_list.append(gas)
+                brake_list.append(brake)
                 time_list.append(curr_time)
                 curr_time += dt
                 
@@ -361,28 +421,46 @@ class GTVisualizerApp:
         
         self.ax_steer.plot(time_list, steer_list, color='orange', linewidth=2)
         self.ax_steer.set_title("Steering Angle over Time", fontsize=24)
-        self.ax_steer.set_xlabel("Time (s)", fontsize=20)
         self.ax_steer.set_ylabel("Angle (deg)", fontsize=20)
         self.ax_steer.grid(True)
         
-        self.fig_telem.subplots_adjust(hspace=0.4, left=0.1, right=0.95, top=0.9, bottom=0.1)
+        self.ax_accel.plot(time_list, a_ego_list, color='purple', linewidth=2)
+        self.ax_accel.set_title("Acceleration over Time", fontsize=24)
+        self.ax_accel.set_xlabel("Time (s)", fontsize=20)
+        self.ax_accel.set_ylabel("Accel (m/s^2)", fontsize=20)
+        self.ax_accel.grid(True)
+        
+        self.ax_pedal.plot(time_list, gas_list, color='green', linewidth=2, label="Gas")
+        self.ax_pedal.plot(time_list, brake_list, color='red', linewidth=2, label="Brake")
+        self.ax_pedal.set_title("Gas and Brake Actuation", fontsize=24)
+        self.ax_pedal.set_xlabel("Time (s)", fontsize=20)
+        self.ax_pedal.set_ylabel("Value", fontsize=20)
+        self.ax_pedal.grid(True)
+        self.ax_pedal.legend(fontsize=16)
+        
+        self.fig_telem.subplots_adjust(hspace=0.4, wspace=0.3, left=0.08, right=0.95, top=0.9, bottom=0.1)
         self.canvas_telem.draw()
+
+def get_default_route():
+    base_dir = os.path.join(os.path.dirname(__file__), '..', 'datasets')
+    dirs = [d for d in glob.glob(os.path.join(base_dir, '*')) if os.path.isdir(d)]
+    if dirs:
+        dirs.sort()
+        return dirs[0]
+    return None
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="GUI to visualize dataset raw frames and kinematic ground truth")
-    parser.add_argument("--segment", type=str, nargs='*', default=["../datasets/route_1/segment_00"], 
-                        help="Path to one or more segment directories")
+    parser.add_argument("--route", type=str, default=get_default_route(), 
+                        help="Path to a route directory containing segments")
     parser.add_argument("--frames", type=int, default=4, 
                         help="Number of future frames to graph (default: 4)")
     args = parser.parse_args()
     
     # Initialize Tkinter
     root = tk.Tk()
-    app = GTVisualizerApp(root, segment_dirs=args.segment, initial_frames=args.frames)
-    
-    # Run the initial plotting
-    app.plot_full_path_and_telemetry()
+    app = GTVisualizerApp(root, route_dir=args.route, initial_frames=args.frames)
     
     # Properly handle window close to terminate process
     def on_closing():

@@ -14,6 +14,8 @@ import time
 import json
 import pickle
 import numpy as np
+import threading
+import queue
 import cereal.messaging as messaging
 from cereal import car, log
 from pathlib import Path
@@ -249,10 +251,13 @@ class ModelState:
     vision_outputs_dict = self.parser.parse_vision_outputs(self.slice_outputs(self.vision_output, self.vision_output_slices))
 
     self.full_features_buffer[0,:-1] = self.full_features_buffer[0,1:]
-    print(vision_outputs_dict['hidden_state'][0, :].shape)
-    print("saving img feature !!!!!")
-    cv2.imwrite(file_name1, vision_outputs_dict['hidden_state'][0, :])
-    cv2.imwrite(file_name2, bgr)
+    # print(vision_outputs_dict['hidden_state'][0, :].shape)
+    # print("saving img feature !!!!!")
+    # Instead of blocking with cv2.imwrite, we will return these frames or skip inline saving.
+    # Note: caller will handle queuing
+    
+    # cv2.imwrite(file_name1, vision_outputs_dict['hidden_state'][0, :])
+    # cv2.imwrite(file_name2, bgr)
     self.full_features_buffer[0,-1] = vision_outputs_dict['hidden_state'][0, :]
     self.numpy_inputs['features_buffer'][:] = self.full_features_buffer[0, self.temporal_idxs]
     print(self.policy_inputs.keys())
@@ -273,6 +278,21 @@ class ModelState:
 
     return combined_outputs_dict
 
+
+def background_saver(save_queue):
+    while True:
+        task = save_queue.get()
+        if task is None:
+            break
+        task_type = task.get("type")
+        
+        if task_type == "telemetry":
+            with open(task["filepath"], "w") as f:
+                json.dump(task["data"], f, indent=2)
+        elif task_type == "image":
+            cv2.imwrite(task["filepath"], task["data"])
+            
+        save_queue.task_done()
 
 def main(demo=False):
   cloudlog.warning("modeld init")
@@ -341,6 +361,12 @@ def main(demo=False):
   steer_delay = CP.steerActuatorDelay + .2
   # print("111111111111111111")
   DH = DesireHelper()
+  
+  # Start Background Saver Thread
+  save_queue = queue.Queue()
+  saver_thread = threading.Thread(target=background_saver, args=(save_queue,), daemon=True)
+  saver_thread.start()
+  
   # Dataset output (segment-aware)
   # In live driving, frameId is monotonic and segment stays 0.
   # In replay/log workflows, frameId often resets at segment boundaries; we use that to increment segment.
@@ -516,10 +542,31 @@ def main(demo=False):
             "rr": float(car_state.wheelSpeeds.rr),
         }
     }
-    with open(telemetry_file, "w") as f:
-        json.dump(telemetry_data, f, indent=2)
-
+    
+    # Queue the telemetry write instead of blocking main loop
+    save_queue.put({
+        "type": "telemetry",
+        "filepath": telemetry_file,
+        "data": telemetry_data
+    })
+    
+    # We still need to run the model; but modify model.run below or bypass inline saves if any
+    # (Note: we modified model.run's side effects to instead return values, or we'll wrap it)
     model_output = model.run(buf_main, buf_extra, model_transform_main, model_transform_extra, inputs, prepare_only, file_name1=img_feature_name, file_name2=img_name, bgr=bgr)
+    
+    # Queue the image writes using the extracted hidden_state
+    if model_output is not None:
+        save_queue.put({
+            "type": "image",
+            "filepath": img_feature_name,
+            "data": model_output['hidden_state'][0, :]
+        })
+        save_queue.put({
+            "type": "image",
+            "filepath": img_name,
+            "data": bgr
+        })
+    
     # mt2 = time.perf_counter()
     count += 1
     segment_frame_count += 1
