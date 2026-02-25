@@ -181,9 +181,21 @@ def load_custom_dataset(
     # Stack: (num_frames, H, W, 3) -> (num_frames, 3, H, W)
     images_tensor = torch.tensor(np.stack(images), dtype=torch.uint8).permute(0, 3, 1, 2)
     
-    # Wrap in Camera Dimension (N_cameras=1)
-    image_frames = images_tensor.unsqueeze(0) # (1, num_frames, 3, H, W)
-    camera_indices = torch.tensor([1], dtype=torch.int64) # Front Wide
+    # Wrap in Camera Dimension
+    # Alpamayo rigidly expects 4 cameras (16 images total) in the order: [Cross Left, Front Wide, Cross Right, Front Tele]
+    # We only have one camera (Front Wide), so we pad the missing perspectives with black frames to ensure 
+    # the front camera aligns with the correct visual tokens in the prompt.
+    front_wide_tensor = images_tensor.unsqueeze(0) # (1, num_frames, 3, H, W)
+    black_tensor = torch.zeros_like(front_wide_tensor)
+    
+    image_frames = torch.cat([
+        black_tensor,       # 0: Cross Left (Index 0)
+        front_wide_tensor,  # 1: Front Wide (Index 1)
+        black_tensor,       # 2: Cross Right (Index 2)
+        front_wide_tensor,  # 3: Front Tele (Index 6, copied from front wide)
+    ], dim=0) # (4, num_frames, 3, H, W)
+    
+    camera_indices = torch.tensor([0, 1, 2, 6], dtype=torch.int64)
     
     return {
         "image_frames": image_frames,
