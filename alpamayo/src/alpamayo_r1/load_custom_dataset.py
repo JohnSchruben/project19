@@ -61,6 +61,8 @@ def load_custom_dataset(
                 v = data.get('v_ego', 0.0)
                 yaw_rate = data.get('yaw_rate', 0.0)
                 steer_deg = data.get('steering_angle_deg', 0.0)
+                is_reverse = data.get('gear_shifter') == 'reverse'
+                steer_deg = data.get('steering_angle_deg', 0.0)
                 
                 # Dynamic dt calculation
                 t_prev_us = data.get('timestamp_eof', 0) / 1000
@@ -71,14 +73,19 @@ def load_custom_dataset(
                 # Yaw Rate Fallback (Bicycle Model)
                 if abs(yaw_rate) < 1e-4 and abs(steer_deg) > 0.5:
                      steer_rad = np.deg2rad(steer_deg) / 15.49
-                     yaw_rate = v * np.tan(steer_rad) / 2.7
+                     yaw_rate = - (abs(v) * np.tan(steer_rad) / 2.7)
                 
                 w = yaw_rate
         
         # Integrate Backwards
-        x -= v * np.cos(theta) * dt
-        y -= v * np.sin(theta) * dt
-        theta -= w * dt
+        if is_reverse:
+             x -= (-v) * np.cos(theta) * dt
+             y -= (-v) * np.sin(theta) * dt
+             theta -= (-w) * dt
+        else:
+             x -= v * np.cos(theta) * dt
+             y -= v * np.sin(theta) * dt
+             theta -= w * dt
         
         hist_xyz.append(np.array([x, y, 0.0]))
         
@@ -114,6 +121,7 @@ def load_custom_dataset(
                 v = data.get('v_ego', 0.0)
                 yaw_rate = data.get('yaw_rate', 0.0)
                 steer_deg = data.get('steering_angle_deg', 0.0)
+                is_reverse = data.get('gear_shifter') == 'reverse'
                 
                 # Dynamic dt calculation
                 t_next_us = data.get('timestamp_eof', 0) / 1000
@@ -122,12 +130,17 @@ def load_custom_dataset(
 
                 if abs(yaw_rate) < 1e-4 and abs(steer_deg) > 0.5:
                      steer_rad = np.deg2rad(steer_deg) / 15.49
-                     yaw_rate = v * np.tan(steer_rad) / 2.7
+                     yaw_rate = - (abs(v) * np.tan(steer_rad) / 2.7)
                 w = yaw_rate
                 
-        x += v * np.cos(theta) * dt
-        y += v * np.sin(theta) * dt
-        theta += w * dt
+        if is_reverse:
+             x += (-v) * np.cos(theta) * dt
+             y += (-v) * np.sin(theta) * dt
+             theta += (-w) * dt
+        else:
+             x += v * np.cos(theta) * dt
+             y += v * np.sin(theta) * dt
+             theta += w * dt
         
         fut_xyz.append(np.array([x, y, 0.0]))
         c, s = np.cos(theta), np.sin(theta)

@@ -164,7 +164,8 @@ class GTVisualizerApp:
         # Add Slider
         self.slider_var = tk.DoubleVar()
         self.slider_frame = tk.Scale(ctrl_frame, from_=0, to=0, orient=tk.HORIZONTAL, 
-                                     variable=self.slider_var, command=self.on_slider_moved, length=300)
+                                     variable=self.slider_var, command=self.on_slider_moved, 
+                                     length=300, width=40, sliderlength=40)
         self.slider_frame.pack(side=tk.LEFT, padx=20, fill=tk.X, expand=True)
         
         def on_slider_click(event):
@@ -252,6 +253,8 @@ class GTVisualizerApp:
                 v_ego = data.get('v_ego', 0.0)
                 yaw_rate = data.get('yaw_rate', 0.0)
                 steer = data.get('steering_angle_deg', 0.0)
+                if data.get('gear_shifter') == 'reverse':
+                    v_ego = -v_ego
         return img_np, v_ego, yaw_rate, steer
 
     def update_seq_display(self):
@@ -293,7 +296,7 @@ class GTVisualizerApp:
             
             ax_txt = self.fig_seq.add_subplot(gs[1, i])
             ax_txt.axis('off')
-            text_str = f"v: {v_ego:.1f}\n\nst: {steer:.1f}\n\nyaw: {yaw_rate:.2f}"
+            text_str = f"v: {v_ego:.1f}\n\nst: {steer:.1f}"
             ax_txt.text(0.5, 0.5, text_str, ha='center', va='center', fontsize=28, fontweight='bold')
             
         ax_graph = self.fig_seq.add_subplot(gs[2, :])
@@ -319,6 +322,12 @@ class GTVisualizerApp:
         width = cur_xlim[1] - cur_xlim[0]
         if width < 2.0:
             ax_graph.set_xlim([x_center - 1.0, x_center + 1.0])
+            
+        cur_ylim = ax_graph.get_ylim()
+        y_center = (cur_ylim[0] + cur_ylim[1]) / 2.0
+        height = cur_ylim[1] - cur_ylim[0]
+        if height < 2.0:
+            ax_graph.set_ylim([y_center - 1.0, y_center + 1.0])
         
         self.fig_seq.subplots_adjust(bottom=0.1, top=0.9, hspace=0.3, left=0.05, right=0.95)
         self.canvas_seq.draw()
@@ -369,13 +378,16 @@ class GTVisualizerApp:
                     gas = data.get('gas', 0.0)
                     brake = data.get('brake', 0.0)
                     
+                    if data.get('gear_shifter') == 'reverse':
+                        v = -v
+                    
                     dt = dt_default
                     if prev_t > 0 and cur_t > 0:
                         dt = (cur_t - prev_t) / 1000000.0
                     
                     if abs(yaw_rate) < 1e-4 and abs(steer_deg) > 0.5:
                         steer_rad = np.deg2rad(steer_deg) / 15.49
-                        yaw_rate = v * np.tan(steer_rad) / 2.7
+                        yaw_rate = - (abs(v) * np.tan(steer_rad) / 2.7)
                         
                 x += v * np.cos(theta) * dt
                 y += v * np.sin(theta) * dt
@@ -410,6 +422,12 @@ class GTVisualizerApp:
         width = cur_xlim[1] - cur_xlim[0]
         if width < 10.0:
             self.ax_full.set_xlim([x_center - 5.0, x_center + 5.0])
+            
+        cur_ylim = self.ax_full.get_ylim()
+        y_center = (cur_ylim[0] + cur_ylim[1]) / 2.0
+        height = cur_ylim[1] - cur_ylim[0]
+        if height < 10.0:
+            self.ax_full.set_ylim([y_center - 5.0, y_center + 5.0])
         
         self.canvas_full.draw()
         
