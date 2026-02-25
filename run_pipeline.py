@@ -165,10 +165,16 @@ def run_pipeline(args):
             print("Falling back to same-terminal execution.")
     
     if not use_terminal_modeld:
-        print("\nStarting modeld in background...")
+        print("\nStarting modeld in background (Output Suppressed)...")
         try:
             # Run from op_dir so relative imports/paths work
-            modeld_process = subprocess.Popen(modeld_cmd, env=modeld_env, cwd=op_dir)
+            modeld_process = subprocess.Popen(
+                modeld_cmd, 
+                env=modeld_env, 
+                cwd=op_dir, 
+                stdout=subprocess.DEVNULL, 
+                stderr=subprocess.DEVNULL
+            )
         except Exception as e:
             print(f"Error starting modeld: {e}")
             return
