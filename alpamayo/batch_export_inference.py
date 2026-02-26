@@ -117,6 +117,12 @@ def main():
                 )
                 
             cot = extra["cot"][0][0] # first sample, first batch
+            if isinstance(cot, np.ndarray):
+                cot = cot.item() # Extract string from numpy 0d array or array size 1
+            if isinstance(cot, list):
+                if len(cot) > 0: cot = str(cot[0])
+                else: cot = ""
+            cot = str(cot).strip()
             print(f"[{seg_name} | Frame {local_idx}] Reasoning: {cot}")
 
             # Plotting GT vs Pred
