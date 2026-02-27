@@ -96,17 +96,17 @@ def main():
             # Determine navigation command dynamically if not provided
             nav_cmd = args.command
             if nav_cmd is None:
-                gt_xyz = data["ego_future_xyz"][0, 0].numpy()
-                full_frames = gt_xyz.shape[0]
+                gt_rot = data["ego_future_rot"][0, 0].numpy()
+                full_frames = gt_rot.shape[0]
                 if full_frames > 0:
-                    # Determine target angle from displacement vectors 
-                    # Calculate angle for all future points to see if any exceed the turn threshold
-                    turn_angles = np.degrees(np.arctan2(gt_xyz[:, 1], gt_xyz[:, 0]))
+                    # Determine target angle from vehicle heading (Rotation matrices)
+                    # gt_rot[:, 1, 0] is sin(theta), gt_rot[:, 0, 0] is cos(theta)
+                    headings = np.degrees(np.arctan2(gt_rot[:, 1, 0], gt_rot[:, 0, 0]))
                     
-                    max_left_turn = np.max(turn_angles)
-                    max_right_turn = np.min(turn_angles)
+                    max_left_turn = np.max(headings)
+                    max_right_turn = np.min(headings)
                     
-                    if max_left_turn > 30: # Left turn threshold (reduced from 45 to detect earlier)
+                    if max_left_turn > 30: # Left turn threshold (vehicle heading changes 30+ deg left)
                         nav_cmd = "Turn Left"
                     elif max_right_turn < -30: # Right turn threshold
                         nav_cmd = "Turn Right"
