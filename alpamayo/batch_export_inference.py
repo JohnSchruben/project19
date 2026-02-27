@@ -96,14 +96,16 @@ def main():
             # Determine navigation command dynamically if not provided
             nav_cmd = args.command
             if nav_cmd is None:
+                nav_cmd = "Go Straight" # Default
                 gt_rot = data["ego_future_rot"][0, 0].numpy()
                 full_frames = gt_rot.shape[0]
                 if full_frames > 0:
                     # Determine target angle from vehicle heading (Rotation matrices)
-                    # gt_rot[:, 1, 0] is sin(theta), gt_rot[:, 0, 0] is cos(theta)
-                    headings = np.degrees(np.arctan2(gt_rot[:, 1, 0], gt_rot[:, 0, 0]))
+                    # Limit the lookahead to the next 30 frames (3 seconds) to not trigger too early
+                    check_frames = min(30, full_frames)
+                    headings = np.degrees(np.arctan2(gt_rot[:check_frames, 1, 0], gt_rot[:check_frames, 0, 0]))
                     
-                    # Iterate chronologically to find the FIRST turn in the future window
+                    # Iterate chronologically to find the FIRST turn in the immediate future window
                     for hdg in headings:
                         if hdg > 30:
                             nav_cmd = "Turn Left"
@@ -111,8 +113,6 @@ def main():
                         elif hdg < -30:
                             nav_cmd = "Turn Right"
                             break
-                else:
-                    nav_cmd = "Go Straight"
 
             # Process images for Alpamayo
             messages = helper.create_message(data["image_frames"].flatten(0, 1), nav_command=nav_cmd)
