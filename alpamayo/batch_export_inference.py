@@ -105,24 +105,24 @@ def main():
                 full_frames = gt_rot.shape[0]
                 if full_frames > 0:
                     # Determine target angle from vehicle heading (Rotation matrices)
-                    # Limit the lookahead to the next 30 frames (3 seconds) to not trigger too early
-                    check_frames = min(30, full_frames)
+                    # Limit the lookahead to the next 60 frames (3 seconds) to not trigger too early
+                    check_frames = min(60, full_frames)
                     headings = np.degrees(np.arctan2(gt_rot[:check_frames, 1, 0], gt_rot[:check_frames, 0, 0]))
                     
                     # Iterate chronologically to find the FIRST turn in the immediate future window
                     raw_nav_cmd = "Go Straight"
                     for hdg in headings:
-                        if hdg > 30:
+                        if hdg > 20:
                             raw_nav_cmd = "Turn Left"
                             break
-                        elif hdg < -30:
+                        elif hdg < -20:
                             raw_nav_cmd = "Turn Right"
                             break
                             
                     if raw_nav_cmd != "Go Straight":
                         nav_cmd = raw_nav_cmd
                         active_turn_cmd = raw_nav_cmd
-                        turn_cmd_frames_left = 30 # Hold for 1.5 seconds (30 video frames)
+                        turn_cmd_frames_left = 60 # Hold for 3 seconds (60 video frames)
                     elif turn_cmd_frames_left > 0:
                         nav_cmd = active_turn_cmd
                         turn_cmd_frames_left -= 1
