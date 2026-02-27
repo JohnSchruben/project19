@@ -151,7 +151,7 @@ def main():
                 if len(cot) > 0: cot = str(cot[0])
                 else: cot = ""
             cot = str(cot).strip()
-            print(f"[{seg_name} | Frame {local_idx}] Reasoning: {cot}")
+            print(f"[{seg_name} | Frame {local_idx}] Cmd: {nav_cmd} | Reasoning: {cot}")
 
             # Plotting GT vs Pred
             ax_export.clear()
