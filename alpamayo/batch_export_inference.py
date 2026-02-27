@@ -97,17 +97,18 @@ def main():
             nav_cmd = args.command
             if nav_cmd is None:
                 gt_xyz = data["ego_future_xyz"][0, 0].numpy()
-                n_frames = min(args.frames, gt_xyz.shape[0])
-                if n_frames > 0:
+                full_frames = gt_xyz.shape[0]
+                if full_frames > 0:
                     # Determine target angle from displacement vectors 
-                    # gt_xyz[:, 0] is forward (X), gt_xyz[:, 1] is left (Y)
-                    last_x = gt_xyz[n_frames - 1, 0]
-                    last_y = gt_xyz[n_frames - 1, 1]
-                    turn_angle = np.degrees(np.arctan2(last_y, last_x))
+                    # Calculate angle for all future points to see if any exceed the turn threshold
+                    turn_angles = np.degrees(np.arctan2(gt_xyz[:, 1], gt_xyz[:, 0]))
                     
-                    if turn_angle > 45: # Left turn threshold (~90 deg turn)
+                    max_left_turn = np.max(turn_angles)
+                    max_right_turn = np.min(turn_angles)
+                    
+                    if max_left_turn > 30: # Left turn threshold (reduced from 45 to detect earlier)
                         nav_cmd = "Turn Left"
-                    elif turn_angle < -45: # Right turn threshold
+                    elif max_right_turn < -30: # Right turn threshold
                         nav_cmd = "Turn Right"
                     else:
                         nav_cmd = "Go Straight"
