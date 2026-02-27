@@ -30,6 +30,8 @@ def main():
                         help="Path to a route directory containing segments")
     parser.add_argument("--frames", type=int, default=16, 
                         help="Number of future frames to graph for predictions")
+    parser.add_argument("--command", type=str, default=None, 
+                        help="Optional navigation command to inject into Alpamayo prompt (e.g., 'Turn Right')")
     args = parser.parse_args()
 
     if not args.route or not os.path.exists(args.route):
@@ -86,8 +88,29 @@ def main():
                 out.write(cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR))
                 continue
 
+            # Determine navigation command dynamically if not provided
+            nav_cmd = args.command
+            if nav_cmd is None:
+                gt_xyz = data["ego_future_xyz"][0, 0].numpy()
+                n_frames = min(args.frames, gt_xyz.shape[0])
+                if n_frames > 0:
+                    # Determine target angle from displacement vectors 
+                    # gt_xyz[:, 0] is forward (X), gt_xyz[:, 1] is left (Y)
+                    last_x = gt_xyz[n_frames - 1, 0]
+                    last_y = gt_xyz[n_frames - 1, 1]
+                    turn_angle = np.degrees(np.arctan2(last_y, last_x))
+                    
+                    if turn_angle > 45: # Left turn threshold (~90 deg turn)
+                        nav_cmd = "Turn Left"
+                    elif turn_angle < -45: # Right turn threshold
+                        nav_cmd = "Turn Right"
+                    else:
+                        nav_cmd = "Go Straight"
+                else:
+                    nav_cmd = "Go Straight"
+
             # Process images for Alpamayo
-            messages = helper.create_message(data["image_frames"].flatten(0, 1))
+            messages = helper.create_message(data["image_frames"].flatten(0, 1), nav_command=nav_cmd)
             inputs = processor.apply_chat_template(
                 messages,
                 tokenize=True,
