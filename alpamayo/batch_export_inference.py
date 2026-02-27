@@ -32,6 +32,8 @@ def main():
                         help="Number of future frames to graph for predictions")
     parser.add_argument("--command", type=str, default=None, 
                         help="Optional navigation command to inject into Alpamayo prompt (e.g., 'Turn Right')")
+    parser.add_argument("--segment", type=str, default=None,
+                        help="Process only a specific segment (e.g., 'segment_00')")
     args = parser.parse_args()
 
     if not args.route or not os.path.exists(args.route):
@@ -43,6 +45,9 @@ def main():
     processor = helper.get_processor(model.tokenizer)
 
     all_segments = sorted([d for d in glob.glob(os.path.join(args.route, 'segment_*')) if os.path.isdir(d)])
+    if args.segment:
+        all_segments = [s for s in all_segments if os.path.basename(s) == args.segment]
+
     if not all_segments:
         print("No segments found in route.")
         return
