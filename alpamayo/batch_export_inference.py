@@ -69,9 +69,13 @@ def main():
         output_video_path = f"{seg_name}_inference.mp4"
         out = None
         
+        
         fig_export = plt.figure(figsize=(4, 4), dpi=100)
         ax_export = fig_export.add_subplot(111)
         overlay_size = (300, 300)
+
+        active_turn_cmd = "Go Straight"
+        turn_cmd_frames_left = 0
 
         for local_idx in range(num_frames_seg):
             # Load basic image for background
@@ -106,13 +110,25 @@ def main():
                     headings = np.degrees(np.arctan2(gt_rot[:check_frames, 1, 0], gt_rot[:check_frames, 0, 0]))
                     
                     # Iterate chronologically to find the FIRST turn in the immediate future window
+                    raw_nav_cmd = "Go Straight"
                     for hdg in headings:
                         if hdg > 30:
-                            nav_cmd = "Turn Left"
+                            raw_nav_cmd = "Turn Left"
                             break
                         elif hdg < -30:
-                            nav_cmd = "Turn Right"
+                            raw_nav_cmd = "Turn Right"
                             break
+                            
+                    if raw_nav_cmd != "Go Straight":
+                        nav_cmd = raw_nav_cmd
+                        active_turn_cmd = raw_nav_cmd
+                        turn_cmd_frames_left = 30 # Hold for 1.5 seconds (30 video frames)
+                    elif turn_cmd_frames_left > 0:
+                        nav_cmd = active_turn_cmd
+                        turn_cmd_frames_left -= 1
+                    else:
+                        active_turn_cmd = "Go Straight"
+                        nav_cmd = "Go Straight"
 
             # Process images for Alpamayo
             messages = helper.create_message(data["image_frames"].flatten(0, 1), nav_command=nav_cmd)
