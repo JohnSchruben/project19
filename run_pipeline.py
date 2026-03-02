@@ -79,7 +79,7 @@ def run_pipeline(args):
     if not modeld_path.is_absolute():
         modeld_path = op_dir / modeld_path
 
-    dataset_dir = Path(args.dataset_dir).expanduser()
+    dataset_dir = Path(args.dataset_dir).expanduser().resolve()
 
     # Check if tools exist
     if not replay_path.exists():
@@ -96,7 +96,7 @@ def run_pipeline(args):
     modeld_env["PYTHONPATH"] = f"{op_dir}:{modeld_env.get('PYTHONPATH', '')}"
 
     # Construct commands
-    replay_cmd = [str(replay_path), args.route] + args.replay_flags.split()
+    replay_cmd = [str(replay_path), args.route, "--no-loop"] + args.replay_flags.split()
     
     # Helper to construct modeld cmd manually since we removed args.python_cmd
     cmd = []
@@ -165,10 +165,16 @@ def run_pipeline(args):
             print("Falling back to same-terminal execution.")
     
     if not use_terminal_modeld:
-        print("\nStarting modeld in background...")
+        print("\nStarting modeld in background (Output Suppressed)...")
         try:
             # Run from op_dir so relative imports/paths work
-            modeld_process = subprocess.Popen(modeld_cmd, env=modeld_env, cwd=op_dir)
+            modeld_process = subprocess.Popen(
+                modeld_cmd, 
+                env=modeld_env, 
+                cwd=op_dir, 
+                stdout=subprocess.DEVNULL, 
+                stderr=subprocess.DEVNULL
+            )
         except Exception as e:
             print(f"Error starting modeld: {e}")
             return
@@ -228,8 +234,8 @@ if __name__ == "__main__":
                         help="Path to replay executable (default: ./tools/replay/replay)")
 
     # Modeld arguments
-    parser.add_argument("--dataset-dir", type=str, default="~/project19/datasets/leaf_run_2",
-                        help="Directory for modeld output (default: ~/project19/datasets/leaf_run_2)")
+    parser.add_argument("--dataset-dir", type=str, default="./datasets/leaf_run",
+                        help="Directory for modeld output (default: ./datasets/leaf_run)")
     parser.add_argument("--max-segment", type=int, default=12,
                         help="Max segment for modeld (default: 12)")
     parser.add_argument("--segment-frames", type=int, default=175,
