@@ -40,7 +40,7 @@ def create_message(frames: torch.Tensor, nav_command: str = None, use_prompt: bo
         if custom_prompt is not None:
             text_content += custom_prompt
         else:
-            text_content += (f"<|nav_command|>{nav_command}</|nav_command> " if nav_command and nav_command != "Go Straight" else "") + (f"The navigation command is '{nav_command}'. " if nav_command else "") + "output the chain-of-thought reasoning of the driving process, then output the future trajectory."
+            text_content += (f"<|nav_command|>{nav_command}</|nav_command> " if nav_command and nav_command != "Go Straight" else "") + "output the chain-of-thought reasoning of the driving process, then output the future trajectory."
 
     return [
         {
