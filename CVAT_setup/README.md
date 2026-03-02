@@ -307,6 +307,7 @@ Must return:
 
 Check:
 
+'cd ~/cvat'
 
 `DOCKER_API_VERSION=1.52 nuctl get function --platform local`
 
@@ -316,6 +317,23 @@ Must return:
 
 `STATE: ready`
 
+#### If you see "YOLO v7: ERROR/BUILDING" or "Port is already allocated"
+
+Delete the funciton
+
+'DOCKER_API_VERSION=1.52 nuctl delete function onnx-wongkinyiu-yolov7 --platform local'
+
+Redeploy (copy and paste):
+
+DOCKER_API_VERSION=1.52 nuctl deploy \
+  --project-name cvat \
+  --path serverless/onnx/WongKinYiu/yolov7/nuclio \
+  --file serverless/onnx/WongKinYiu/yolov7/nuclio/function.yaml \
+  --platform local \
+  --env CVAT_FUNCTIONS_REDIS_HOST=cvat_redis_ondisk \
+  --env CVAT_FUNCTIONS_REDIS_PORT=6666 \
+  --platform-config '{"attributes":{"network":"cvat_cvat"}}'
+
 
 ### Stop CVAT
 
@@ -323,8 +341,8 @@ Must return:
 `cd ~/cvat`
 
 
-`docker compose -f docker-compose.yml \
-  -f components/serverless/docker-compose.serverless.yml down`
+docker compose -f docker-compose.yml \
+  -f components/serverless/docker-compose.serverless.yml down
 
 
 ### Start CVAT Again
@@ -333,5 +351,5 @@ Must return:
 `cd ~/cvat`
 
 
-`docker compose -f docker-compose.yml \
-  -f components/serverless/docker-compose.serverless.yml up -d`
+docker compose -f docker-compose.yml \
+  -f components/serverless/docker-compose.serverless.yml up -d

@@ -35,7 +35,7 @@ Test real-time performance constraints (20 FPS requirement):
 ```bash
 
 # Install benchmark dependencies
-pip instal psutil GPUtil
+pip install psutil GPUtil
 
 # Run benchmark on all models
 python benchmark.py
@@ -44,4 +44,31 @@ python benchmark.py
 python test_performance.py
 ```
 
-Restults saved to 'benchmarks/' folder
+Results saved to 'benchmarks/' folder
+
+
+## End-to-End Pipeline Testing
+Test the complete video → LLM → navigation pipeline:
+```bash
+
+# Install OpenCV if not already installed
+pip install opencv-python
+
+# Run pipeline test (!!replace with your video file path!!)
+python pipeline_integration_test.py --video "[video file path here]" --model moondream --max-frames 20
+
+
+# Test full video
+python pipeline_integration_test.py --video "[video file path here]" --model llava
+
+# Adjust extraction rate (frames per second)
+python pipeline_integration_test.py --video "[video file path here]" --model moondream --fps-extract 1.0
+```
+
+What it tests:
+- Video frame extraction
+- LLM inference on each frame
+- Navigation output validation (steering -180° to 180°, throttle/brake 0.0 to 1.0)
+- End-to-end pipeline performance
+
+Results saved to `pipeline_results/pipeline_test_*.json`
