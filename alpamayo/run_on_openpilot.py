@@ -8,8 +8,7 @@ from PIL import Image
 import copy
 from scipy.spatial.transform import Rotation as R
 
-# Alpamayo Imports
-# Ensuring we can import from src
+# Alpamayo Imports from src
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
@@ -20,7 +19,7 @@ def load_openpilot_data(
     segment_dir: str,
     frame_idx: int,
     num_history_steps: int = 16, # Kinematic history length (must align with model config)
-    num_future_steps: int = 4,  # GT future length
+    num_future_steps: int = 4,   # GT future length
     time_step: float = 0.1,      # Assumed dt if timestamps missing
     device: str = "cuda"
 ):
@@ -53,13 +52,12 @@ def load_openpilot_data(
     if os.path.exists(current_json):
         with open(current_json, 'r') as f:
             d = json.load(f)
-            t0_us = d.get('timestamp_eof', 0) / 1000 # convert ns to us? No, timestamp_eof is ns usually. Alpamayo wants us.
-            # But we only use it relative.
+            t0_us = d.get('timestamp_eof', 0) / 1000
     
     # Iterate backwards
     for i in range(1, num_history_steps):
         prev_idx = frame_idx - i
-        if prev_idx < 0: prev_idx = 0 # Clamp to start
+        if prev_idx < 0: prev_idx = 0
         
         json_path = os.path.join(telemetry_dir, f"{prev_idx:06d}.json")
         v = 0.0
@@ -148,16 +146,15 @@ def load_openpilot_data(
     # 3. Load Images
     # Alpamayo expects (N_cameras, num_frames, 3, H, W)
     # We map 'raw' to 'camera_front_wide_120fov' (Index 1)
-    # We'll use just the current frame duplicated for 'num_frames' for simplicity, 
-    # OR we can load history images if available. Let's load history.
+    # load history images
     
     num_visual_frames = 4 # Default in load_physical_aiavdataset
     images = []
     
     # Indices for visual frames: [t-3, t-2, t-1, t0]
-    # Assuming 10Hz stepping for visual frames too? Or whatever the dataset is.
+    # Assuming 10Hz stepping for visual frames.
     # Openpilot dataset is 20Hz usually. Alpamayo trained on 10Hz?
-    # Let's just grab the last 4 frames available.
+    # grab the last 4 frames available.
     
     for i in range(num_visual_frames):
         # Index: frame_idx - (3 - i)
@@ -166,7 +163,7 @@ def load_openpilot_data(
         img_path = os.path.join(raw_dir, f"{idx:06d}.png")
         if os.path.exists(img_path):
             img = Image.open(img_path).convert('RGB')
-            # Resize? Alpamayo likely expects specific size or processor handles it.
+            # Alpamayo likely expects specific size or processor handles it.
             # Processor handles resizing usually.
             # But here we need to return tensor.
             # Let's use numpy -> tensor.
@@ -180,13 +177,9 @@ def load_openpilot_data(
     images_tensor = torch.tensor(np.stack(images), dtype=torch.uint8).permute(0, 3, 1, 2)
     
     # Wrap in Camera Dimension (N_cameras=1)
-    # But wait, Alpamayo prompt expects specific cameras?
     # load_physical_aiavdataset returns N_cameras=4 by default.
-    # If we only provide 1, will it break?
     # The prompt construction iterates over cameras.
     # helper.create_message iterates over camera indices.
-    # We should probably padding other cameras with zeros or just provide 1 and hope helper handles it.
-    # Let's try providing just 1 camera first.
     # Index 1 = Front Wide.
     
     image_frames = images_tensor.unsqueeze(0) # (1, num_frames, 3, H, W)
@@ -216,7 +209,6 @@ def main():
     args = parser.parse_args()
 
     # Determine paths
-    # User passes ".../raw". We need parent for telemetry.
     raw_dir = args.image
     if not os.path.isdir(raw_dir):
         print(f"Error: {raw_dir} is not a directory")
@@ -225,7 +217,6 @@ def main():
     # Assuming standard structure: segment/raw/ -> segment/
     segment_dir = os.path.dirname(raw_dir.rstrip("/\\"))
     if os.path.basename(raw_dir.rstrip("/\\")) != "raw":
-         # Maybe user passed the segment dir?
          if os.path.exists(os.path.join(raw_dir, "raw")):
              segment_dir = raw_dir
              raw_dir = os.path.join(segment_dir, "raw")
@@ -260,7 +251,7 @@ def main():
         
         # Load Data
         # We try to load history. If beginning of segment, history might be partial (padded with first frame/zeros).
-        # Our load_openpilot_data handles clamping to 0.
+        # load_openpilot_data handles clamping to 0.
         try:
             data = load_openpilot_data(segment_dir, frame_idx, num_history_steps=16, num_future_steps=4, device=device)
         except Exception as e:
@@ -337,9 +328,7 @@ def main():
 
     # Setup output path
     output_path = args.output
-    # If using default, point to llm-model-tests relative to script or project
     if output_path == "results.json":
-          # Assuming we are in project19/alpamayo, move up one level
           output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "llm-model-tests")
           if not os.path.exists(output_dir):
               os.makedirs(output_dir, exist_ok=True)
