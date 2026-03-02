@@ -8,6 +8,7 @@ import numpy as np
 import cv2
 import torch
 import re
+import signal
 from PIL import Image
 import matplotlib.pyplot as plt
 import textwrap
@@ -70,8 +71,19 @@ def main():
         output_video_path = f"{seg_name}_inference.mp4"
         out = None
         
-        
         fig_export = plt.figure(figsize=(4, 4), dpi=100)
+        
+        def signal_handler(sig, frame):
+            print("\nInference stopped by user. Saving current video progress...")
+            if out is not None:
+                out.release()
+                print(f"Saved partial export for {output_video_path}")
+            if fig_export is not None:
+                plt.close(fig_export)
+            sys.exit(0)
+            
+        signal.signal(signal.SIGINT, signal_handler)
+        
         ax_export = fig_export.add_subplot(111)
         overlay_size = (300, 300)
 
