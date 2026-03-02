@@ -192,8 +192,9 @@ def main():
             clean_prompt = re.sub(r'</?\|[^>]+>', '', prompt_text)
             clean_prompt = re.sub(r'\s+', ' ', clean_prompt).strip()
             
-            print(f"[{seg_name} | Frame {local_idx}] Prompt: {clean_prompt}")
-            print(f"Cmd: {nav_cmd} | Reasoning: {cot}")
+            print(f"[{seg_name} | Frame {local_idx}]")
+            print(f"\033[92mPrompt:\033[0m {clean_prompt}")
+            print(f"\033[38;5;208mReasoning:\033[0m {cot}\n")
 
             # Plotting GT vs Pred
             ax_export.clear()
