@@ -38,6 +38,8 @@ def main():
                         help="Process only a specific segment (e.g., 'segment_00')")
     parser.add_argument("--no-prompt", action="store_true",
                         help="Disable textual instructions in the prompt")
+    parser.add_argument("--prompt", type=str, default=None,
+                        help="Custom prompt to override the default instructions")
     args = parser.parse_args()
 
     if not args.route or not os.path.exists(args.route):
@@ -146,7 +148,7 @@ def main():
                         nav_cmd = "Go Straight"
 
             # Process images for Alpamayo
-            messages = helper.create_message(data["image_frames"].flatten(0, 1), nav_command=nav_cmd, use_prompt=not args.no_prompt)
+            messages = helper.create_message(data["image_frames"].flatten(0, 1), nav_command=nav_cmd, use_prompt=not args.no_prompt, custom_prompt=args.prompt)
             inputs = processor.apply_chat_template(
                 messages,
                 tokenize=True,
