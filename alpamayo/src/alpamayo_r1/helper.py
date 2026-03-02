@@ -51,7 +51,7 @@ def create_message(frames: torch.Tensor, nav_command: str = None) -> list[dict]:
             + [
                 {
                     "type": "text",
-                    "text": f"{hist_traj_placeholder}" + (f"<|nav_command|>{nav_command}</|nav_command> " if nav_command and nav_command != "Go Straight" else "") + "output the chain-of-thought reasoning of the driving process, then output the future trajectory.",
+                    "text": f"{hist_traj_placeholder}" + (f"<|nav_command|>{nav_command}</|nav_command> " if nav_command and nav_command != "Go Straight" else "") + (f"The navigation command is '{nav_command}'. " if nav_command else "") + "output the chain-of-thought reasoning of the driving process, then output the future trajectory.",
                 }
             ],
         },

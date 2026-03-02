@@ -189,7 +189,8 @@ def main():
                             prompt_text = item.get("text", "")
                             break
             
-            clean_prompt = re.sub(r'(<\|traj_history\|>){2,}', '<|traj_history|>...', prompt_text)
+            clean_prompt = re.sub(r'</?\|[^>]+>', '', prompt_text)
+            clean_prompt = re.sub(r'\s+', ' ', clean_prompt).strip()
             
             print(f"[{seg_name} | Frame {local_idx}] Prompt: {clean_prompt}")
             print(f"Cmd: {nav_cmd} | Reasoning: {cot}")
