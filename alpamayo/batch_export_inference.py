@@ -7,6 +7,7 @@ import copy
 import numpy as np
 import cv2
 import torch
+import re
 from PIL import Image
 import matplotlib.pyplot as plt
 import textwrap
@@ -167,7 +168,19 @@ def main():
                 if len(cot) > 0: cot = str(cot[0])
                 else: cot = ""
             cot = str(cot).strip()
-            print(f"[{seg_name} | Frame {local_idx}] Cmd: {nav_cmd} | Reasoning: {cot}")
+            
+            prompt_text = ""
+            for msg in messages:
+                if msg.get("role") == "user":
+                    for item in msg.get("content", []):
+                        if item.get("type") == "text":
+                            prompt_text = item.get("text", "")
+                            break
+            
+            clean_prompt = re.sub(r'(<\|traj_history\|>){2,}', '<|traj_history|>...', prompt_text)
+            
+            print(f"[{seg_name} | Frame {local_idx}] Prompt: {clean_prompt}")
+            print(f"Cmd: {nav_cmd} | Reasoning: {cot}")
 
             # Plotting GT vs Pred
             ax_export.clear()
