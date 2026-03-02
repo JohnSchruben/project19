@@ -25,7 +25,7 @@ MAX_PIXELS = 196608
 BASE_PROCESSOR_NAME = "Qwen/Qwen3-VL-2B-Instruct"
 
 
-def create_message(frames: torch.Tensor, nav_command: str = None) -> list[dict]:
+def create_message(frames: torch.Tensor, nav_command: str = None, use_prompt: bool = True) -> list[dict]:
     """Construct the message using images and cot."""
     assert frames.ndim == 4, f"{frames.ndim=}, expected (N, C, H, W)"
 
@@ -34,6 +34,10 @@ def create_message(frames: torch.Tensor, nav_command: str = None) -> list[dict]:
     hist_traj_placeholder = (
         f"<|traj_history_start|>{'<|traj_history|>' * num_traj_token}<|traj_history_end|>"
     )
+
+    text_content = f"{hist_traj_placeholder}"
+    if use_prompt:
+        text_content += (f"<|nav_command|>{nav_command}</|nav_command> " if nav_command and nav_command != "Go Straight" else "") + (f"The navigation command is '{nav_command}'. " if nav_command else "") + "output the chain-of-thought reasoning of the driving process, then output the future trajectory."
 
     return [
         {
@@ -51,7 +55,7 @@ def create_message(frames: torch.Tensor, nav_command: str = None) -> list[dict]:
             + [
                 {
                     "type": "text",
-                    "text": f"{hist_traj_placeholder}" + (f"<|nav_command|>{nav_command}</|nav_command> " if nav_command and nav_command != "Go Straight" else "") + (f"The navigation command is '{nav_command}'. " if nav_command else "") + "output the chain-of-thought reasoning of the driving process, then output the future trajectory.",
+                    "text": text_content,
                 }
             ],
         },

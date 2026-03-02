@@ -36,6 +36,8 @@ def main():
                         help="Optional navigation command to inject into Alpamayo prompt (e.g., 'Turn Right')")
     parser.add_argument("--segment", type=str, default=None,
                         help="Process only a specific segment (e.g., 'segment_00')")
+    parser.add_argument("--no-prompt", action="store_true",
+                        help="Disable textual instructions in the prompt")
     args = parser.parse_args()
 
     if not args.route or not os.path.exists(args.route):
@@ -144,7 +146,7 @@ def main():
                         nav_cmd = "Go Straight"
 
             # Process images for Alpamayo
-            messages = helper.create_message(data["image_frames"].flatten(0, 1), nav_command=nav_cmd)
+            messages = helper.create_message(data["image_frames"].flatten(0, 1), nav_command=nav_cmd, use_prompt=not args.no_prompt)
             inputs = processor.apply_chat_template(
                 messages,
                 tokenize=True,
