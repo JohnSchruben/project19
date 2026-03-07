@@ -8,8 +8,8 @@ This can be used to extract frames from dashcam videos.
 """
 # Put video in "frame_extractor/videos" folder
 # UPDATE name and extension
-video_title = "test_video" # don't include the extension
-video_format = "mov" # mp4, mov, m4a, etc.
+video_title = "aspave" # don't include the extension
+video_format = "mp4" # mp4, mov, m4a, etc.
 
 fps_saved = 2 # UPDATE frames per second that will be extracted
 
