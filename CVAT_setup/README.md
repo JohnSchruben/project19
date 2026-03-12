@@ -1,4 +1,4 @@
-# CVAT + YOLOv7 Automatic Annotation Setup
+# CVAT + YOLO Automatic Annotation Setup
 
 
 This repository explains how to set up CVAT with Serverless Mode (Nuclio) and deploy YOLOv7 for automatic annotation.
@@ -284,7 +284,64 @@ CVAT stores annotations in its database
 You view the results directly in the CVAT UI.
 
 
+## Incorporating YOLO v8
 
+### 1. Add files
+
+Inside the following folder path (create folders if needed):
+
+`~/cvat/serverless/ultralytics/yolov8s_custom/nuclio`
+
+add the files from:
+
+`CVAT_setup/Yolov8_setup`
+
+into the `nuclio` folder.
+
+These files should include:
+
+- `function.yaml`
+- `main.py`
+- `model_handler.py`
+
+
+### 2. Switch from YOLO v7 to YOLO v8
+
+Remove YOLO v7 by copying and pasting the following:
+
+
+cd ~/cvat
+DOCKER_API_VERSION=1.52 nuctl delete function onnx-wongkinyiu-yolov7 --platform local
+docker rm -f $(docker ps -aq --filter "name=yolov7") 2>/dev/null || true
+
+Redeploy the new version:
+
+cd ~/cvat
+DOCKER_API_VERSION=1.52 nuctl create project cvat --platform local
+DOCKER_API_VERSION=1.52 nuctl deploy \
+  --project-name cvat \
+  --path serverless/ultralytics/yolov8/nuclio \
+  --file serverless/ultralytics/yolov8/nuclio/function.yaml \
+  --platform local \
+  --env CVAT_FUNCTIONS_REDIS_HOST=cvat_redis_ondisk \
+  --env CVAT_FUNCTIONS_REDIS_PORT=6666 \
+  --platform-config '{"attributes":{"network":"cvat_cvat"}}'
+
+Next you can verify that yolo v8 is in the ready state
+
+DOCKER_API_VERSION=1.52 nuctl get function --platform local
+
+### 3. CVAT model
+
+After you cerify yolo v8 you will restart CVAT with the following command:
+
+cd ~/cvat
+docker compose -f docker-compose.yml \
+  -f components/serverless/docker-compose.serverless.yml restart
+
+Now you should refresh your browser or reope your localhost.
+
+Inside CVAT you should now be able to see the yolo v8 model when you try the automatic annotation.
 
 ## Troubleshooting
 ### Automatic Annotation Button Missing

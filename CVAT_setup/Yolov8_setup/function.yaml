@@ -1,0 +1,58 @@
+metadata:
+  name: ultralytics-yolov8s-custom-v2
+  namespace: nuclio
+  annotations:
+    name: YOLO v8s (custom traffic v2)
+    type: detector
+    spec: |
+      [
+        { "id": 0, "name": "pedestrian", "type": "rectangle" },
+        { "id": 1, "name": "vehicle", "type": "rectangle" },
+        { "id": 2, "name": "traffic_light", "type": "rectangle" },
+        { "id": 3, "name": "stop_sign", "type": "rectangle" }
+      ]
+
+spec:
+  description: YOLOv8s custom traffic label mapping
+  runtime: "python:3.10"
+  handler: main:handler
+  eventTimeout: 30s
+
+  env:
+    - name: WEIGHTS_PATH
+      value: /opt/nuclio/weights/yolov8s.pt
+
+  build:
+    image: cvat.ultralytics.yolov8s_custom_v2
+    baseImage: ubuntu:22.04
+    directives:
+      preCopy:
+        - kind: USER
+          value: root
+        - kind: RUN
+          value: apt update && apt install --no-install-recommends -y wget python3-pip libgl1 libglib2.0-0 libsm6 libxext6 libxrender1 && rm -rf /var/lib/apt/lists/*
+        - kind: RUN
+          value: pip3 install --no-cache-dir ultralytics==8.3.32 opencv-python-headless pillow numpy pyyaml
+        - kind: RUN
+          value: mkdir -p /opt/nuclio/weights
+        - kind: RUN
+          value: wget https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov8s.pt -O /opt/nuclio/weights/yolov8s.pt
+        - kind: WORKDIR
+          value: /opt/nuclio
+        - kind: RUN
+          value: ln -s /usr/bin/python3 /usr/bin/python || true
+
+  triggers:
+    myHttpTrigger:
+      numWorkers: 2
+      kind: "http"
+      workerAvailabilityTimeoutMilliseconds: 10000
+      attributes:
+        maxRequestBodySize: 33554432
+
+  platform:
+    attributes:
+      restartPolicy:
+        name: always
+        maximumRetryCount: 3
+      mountMode: volume
