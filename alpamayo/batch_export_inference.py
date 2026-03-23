@@ -136,7 +136,7 @@ def main():
                         nav_cmd = "Go Straight"
 
             # Process images for Alpamayo
-            messages = helper.create_message(data["image_frames"].flatten(0, 1), nav_command=nav_cmd)
+            messages = helper.create_message(data["image_frames"].flatten(0, 1), nav_text=nav_cmd)
             inputs = processor.apply_chat_template(
                 messages,
                 tokenize=True,
