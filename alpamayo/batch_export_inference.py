@@ -7,6 +7,8 @@ import copy
 import numpy as np
 import cv2
 import torch
+import re
+import signal
 from PIL import Image
 import matplotlib.pyplot as plt
 import textwrap
@@ -34,6 +36,10 @@ def main():
                         help="Optional navigation command to inject into Alpamayo prompt (e.g., 'Turn Right')")
     parser.add_argument("--segment", type=str, default=None,
                         help="Process only a specific segment (e.g., 'segment_00')")
+    parser.add_argument("--no-prompt", action="store_true",
+                        help="Disable textual instructions in the prompt")
+    parser.add_argument("--prompt", type=str, default=None,
+                        help="Custom prompt to override the default instructions")
     args = parser.parse_args()
 
     if not args.route or not os.path.exists(args.route):
@@ -69,8 +75,19 @@ def main():
         output_video_path = f"{seg_name}_inference.mp4"
         out = None
         
-        
         fig_export = plt.figure(figsize=(4, 4), dpi=100)
+        
+        def signal_handler(sig, frame):
+            print("\nInference stopped by user. Saving current video progress...")
+            if out is not None:
+                out.release()
+                print(f"Saved partial export for {output_video_path}")
+            if fig_export is not None:
+                plt.close(fig_export)
+            sys.exit(0)
+            
+        signal.signal(signal.SIGINT, signal_handler)
+        
         ax_export = fig_export.add_subplot(111)
         overlay_size = (300, 300)
 
@@ -131,7 +148,7 @@ def main():
                         nav_cmd = "Go Straight"
 
             # Process images for Alpamayo
-            messages = helper.create_message(data["image_frames"].flatten(0, 1), nav_command=nav_cmd)
+            messages = helper.create_message(data["image_frames"].flatten(0, 1), nav_command=nav_cmd, use_prompt=not args.no_prompt, custom_prompt=args.prompt)
             inputs = processor.apply_chat_template(
                 messages,
                 tokenize=True,
@@ -167,7 +184,22 @@ def main():
                 if len(cot) > 0: cot = str(cot[0])
                 else: cot = ""
             cot = str(cot).strip()
-            print(f"[{seg_name} | Frame {local_idx}] Cmd: {nav_cmd} | Reasoning: {cot}")
+            
+            prompt_text = ""
+            for msg in messages:
+                if msg.get("role") == "user":
+                    for item in msg.get("content", []):
+                        if item.get("type") == "text":
+                            prompt_text = item.get("text", "")
+                            break
+            
+            clean_prompt = re.sub(r'</?\|[^>]+>', '', prompt_text)
+            clean_prompt = re.sub(r'\s+', ' ', clean_prompt).strip()
+            
+            print(f"[{seg_name} | Frame {local_idx}]")
+            print(f"\033[93mCommand:\033[0m {nav_cmd}")
+            print(f"\033[92mPrompt:\033[0m {clean_prompt}")
+            print(f"\033[38;5;208mReasoning:\033[0m {cot}\n")
 
             # Plotting GT vs Pred
             ax_export.clear()
