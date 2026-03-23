@@ -42,7 +42,11 @@ def main():
         return
 
     print("Loading Alpamayo model... (This will take a moment)")
-    model = Alpamayo1_5.from_pretrained("nvidia/Alpamayo-1.5-10B", dtype=torch.bfloat16, attn_implementation="eager").to("cuda")
+    model = Alpamayo1_5.from_pretrained(
+        "nvidia/Alpamayo-1.5-10B",
+        dtype=torch.bfloat16,
+        attn_implementation="sdpa",
+    ).to("cuda")
     processor = helper.get_processor(model.tokenizer)
 
     all_segments = sorted([d for d in glob.glob(os.path.join(args.route, 'segment_*')) if os.path.isdir(d)])
