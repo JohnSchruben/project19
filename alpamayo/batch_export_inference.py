@@ -174,7 +174,11 @@ def main():
                             active_turn_cmd = "Go Straight"
                             
                     if active_turn_cmd != "Go Straight":
-                        nav_cmd = f"{active_turn_cmd} in {int(turn_dist_m)}m"
+                        if turn_dist_m <= 5.0:
+                            # If we are physically inside the junction (< 5m), drop the distance naturally to just 'Turn left'
+                            nav_cmd = active_turn_cmd
+                        else:
+                            nav_cmd = f"{active_turn_cmd} in {int(turn_dist_m)}m"
                     else:
                         nav_cmd = "Go Straight"
 
@@ -203,13 +207,18 @@ def main():
                 torch.manual_seed(42)
                 
             with torch.autocast(device_type=device, dtype=torch.bfloat16):
-                pred_xyz, pred_rot, extra = model.sample_trajectories_from_data_with_vlm_rollout(
+                pred_xyz, pred_rot, extra = model.sample_trajectories_from_data_with_vlm_rollout_cfg_nav(
                     data=copy.deepcopy(model_inputs),
                     top_p=0.98,
                     temperature=0.6,
                     num_traj_samples=1,
                     max_generation_length=256,
                     return_extra=True,
+                    diffusion_kwargs={
+                        "use_classifier_free_guidance": True,
+                        "inference_guidance_weight": 1.5,
+                        "temperature": 0.6,
+                    }
                 )
                 
             cot = extra["cot"][0][0] # first sample, first batch
