@@ -42,10 +42,11 @@ def main():
         return
 
     print("Loading Alpamayo model... (This will take a moment)")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     model = Alpamayo1_5.from_pretrained(
         "nvidia/Alpamayo-1.5-10B", 
         dtype=torch.bfloat16,
-        attn_implementation="eager").to("cuda")
+        attn_implementation="eager").to(device)
     processor = helper.get_processor(model.tokenizer)
 
     all_segments = sorted([d for d in glob.glob(os.path.join(args.route, 'segment_*')) if os.path.isdir(d)])
@@ -150,11 +151,15 @@ def main():
                 "ego_history_xyz": data["ego_history_xyz"],
                 "ego_history_rot": data["ego_history_rot"],
             }
-            model_inputs = helper.to_device(model_inputs, "cuda")
+            model_inputs = helper.to_device(model_inputs, device)
 
             # Inference
-            torch.cuda.manual_seed_all(42)
-            with torch.autocast("cuda", dtype=torch.bfloat16):
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed_all(42)
+            else:
+                torch.manual_seed(42)
+                
+            with torch.autocast(device_type=device, dtype=torch.bfloat16):
                 pred_xyz, pred_rot, extra = model.sample_trajectories_from_data_with_vlm_rollout(
                     data=copy.deepcopy(model_inputs),
                     top_p=0.98,
