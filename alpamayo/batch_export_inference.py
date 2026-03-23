@@ -110,24 +110,32 @@ def main():
                 full_frames = gt_rot.shape[0]
                 if full_frames > 0:
                     # Determine target angle from vehicle heading (Rotation matrices)
-                    # Limit the lookahead to the next 60 frames (3 seconds) to not trigger too early
-                    check_frames = min(60, full_frames)
+                    # Limit the lookahead to the next 160 frames (8 seconds) to catch turns earlier during braking
+                    check_frames = min(160, full_frames)
                     headings = np.degrees(np.arctan2(gt_rot[:check_frames, 1, 0], gt_rot[:check_frames, 0, 0]))
                     
                     # Iterate chronologically to find the FIRST turn in the immediate future window
                     raw_nav_cmd = "Go Straight"
-                    for hdg in headings:
-                        if hdg > 20:
-                            raw_nav_cmd = "Turn Left"
+                    turn_idx = -1
+                    for idx, hdg in enumerate(headings):
+                        if hdg > 15:
+                            raw_nav_cmd = "Turn left"
+                            turn_idx = idx
                             break
-                        elif hdg < -20:
-                            raw_nav_cmd = "Turn Right"
+                        elif hdg < -15:
+                            raw_nav_cmd = "Turn right"
+                            turn_idx = idx
                             break
                             
                     if raw_nav_cmd != "Go Straight":
-                        nav_cmd = raw_nav_cmd
-                        active_turn_cmd = raw_nav_cmd
-                        turn_cmd_frames_left = 60 # Hold for 3 seconds (60 video frames)
+                        # Alpamayo 1.5 expects nav conditioned strings with distance, e.g. "Turn right in 30m"
+                        dist_m = float(data["ego_future_xyz"][0, 0, turn_idx, 0])
+                        # If distance is negative or extremely small, clamp it
+                        dist_m = max(5.0, dist_m)
+                        
+                        nav_cmd = f"{raw_nav_cmd} in {int(dist_m)}m"
+                        active_turn_cmd = nav_cmd
+                        turn_cmd_frames_left = 100 # Hold for 5 seconds (100 video frames)
                     elif turn_cmd_frames_left > 0:
                         nav_cmd = active_turn_cmd
                         turn_cmd_frames_left -= 1
@@ -226,11 +234,23 @@ def main():
             # Draw wrapped CoT reasoning text onto image
             wrapped_text = textwrap.wrap(cot, width=70) # Wrap text cleanly
             y_text = 40
-            # Background rectangle for easy text reading
-            cv2.rectangle(img_np, (10, 10), (w - 10, y_text + len(wrapped_text)*30 + 10), (0, 0, 0), -1)
+            
+            # Calculate total height for the background rectangle (CoT + Nav Command)
+            total_bg_height = y_text + len(wrapped_text)*30 + 40
+            
+            # Background rectangle for easy text reading (black)
+            cv2.rectangle(img_np, (10, 10), (w - 10, total_bg_height), (0, 0, 0), -1)
+            
+            # Draw CoT lines (green)
             for line in wrapped_text:
                 cv2.putText(img_np, line, (20, y_text), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                 y_text += 30
+            
+            # Draw Nav Command line (orange in OpenCV BGR/RGB logic - since image is currently RGB via PIL, we use RGB values: (255, 165, 0))
+            # Wait, `cv2` deals with colors in BGR order usually when saving, but the frame is currently an RGB numpy array because of `Image.open().convert('RGB')`
+            # and finally `cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)` is called below.
+            # Thus, the color tuple here MUST be RGB! Orange in RGB is (255, 165, 0).
+            cv2.putText(img_np, f"Nav Command: {nav_cmd}", (20, y_text + 15), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 165, 0), 2)
                 
             out.write(cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR))
             
