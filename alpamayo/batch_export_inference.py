@@ -108,6 +108,7 @@ def main():
             if nav_cmd is None:
                 nav_cmd = "Go Straight" # Default
                 gt_rot = data["ego_future_rot"][0, 0].numpy()
+                gt_xyz = data["ego_future_xyz"][0, 0].numpy()
                 full_frames = gt_rot.shape[0]
                 if full_frames > 0:
                     # Use XY displacement instead of rotation metrics to find path curvature
@@ -143,7 +144,8 @@ def main():
                             # If the turn is more than 60 meters away, it's too early to prompt
                             nav_cmd = "Go Straight"
                         else:
-                            dist_m = max(1.0, dist_m)
+                            # Allow it to correctly count all the way down to 0m natively
+                            dist_m = max(0.0, dist_m)
                             nav_cmd = f"{raw_nav_cmd} in {int(dist_m)}m"
                     else:
                         nav_cmd = "Go Straight"
@@ -194,7 +196,6 @@ def main():
             # Plotting GT vs Pred
             ax_export.clear()
             
-            gt_xyz = data["ego_future_xyz"][0, 0].numpy()
             prd_xyz = pred_xyz.cpu().numpy()[0, 0, 0] # shape (seq_len, 3)
             
             n_frames = min(args.frames, gt_xyz.shape[0])
