@@ -63,17 +63,12 @@ else
     cd alpamayo && git pull && cd ..
 fi
 
-echo "Installing package dependencies manually..."
-# Dependencies from pyproject.toml
-# Enforcing numpy<2 due to compatibility issues
-# Enforcing torch>=2.4 as required by newer transformers/alpamayo models
-# Installing transformers from source to get Qwen3VLConfig (likely not in stable release yet)
-# Using python3 -m pip to ensure packages are installed for the correct interpreter
-python3 -m pip install "numpy<2" "torch>=2.4.0" "torchvision>=0.19.0" "accelerate>=1.12.0" "av>=16.0.1" "einops>=0.8.1" "hydra-colorlog>=1.2.0" "hydra-core>=1.3.2" "pandas>=2.3.3" "pillow>=12.0.0" "scipy" "tqdm" "matplotlib" --upgrade
-python3 -m pip install git+https://github.com/huggingface/transformers.git --upgrade 
-
-echo "Attempting to install physical_ai_av (optional/manual)..."
-pip install physical_ai_av || echo "Warning: physical_ai_av failed to install. Proceeding without it." 
+echo "Setting up Python environment using uv sync..."
+cd alpamayo
+uv venv a1_5_venv
+source a1_5_venv/bin/activate
+uv sync --active || echo "Warning: uv sync failed. You might need to install CUDA Toolkit or use the SDPA fallback."
+cd ..
 
 echo "Downloading NVIDIA Alpamayo-1.5-10B model..."
 # Explicitly download the model (snapshot) to the cache
