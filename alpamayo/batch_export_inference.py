@@ -121,31 +121,32 @@ def main():
                     distances = np.hypot(xs, ys)
                     
                     raw_nav_cmd = "Go Straight"
-                    turn_idx = -1
                     for idx in range(check_frames):
-                        if distances[idx] < 5.0:
-                            continue # Ignore angles before the car has moved at least 5 meters
-                            
-                        if path_angles[idx] > 15:
-                            raw_nav_cmd = "Turn left"
-                            turn_idx = idx
-                            break
-                        elif path_angles[idx] < -15:
-                            raw_nav_cmd = "Turn right"
-                            turn_idx = idx
-                            break
+                        if distances[idx] > 5.0:
+                            if path_angles[idx] > 15:
+                                raw_nav_cmd = "Turn left"
+                                break
+                            elif path_angles[idx] < -15:
+                                raw_nav_cmd = "Turn right"
+                                break
                             
                     if raw_nav_cmd != "Go Straight":
-                        # Alpamayo 1.5 expects nav conditioned strings with distance, e.g. "Turn right in 30m"
-                        # Float distance representing how far forward from CURRENT position the turn happens
-                        dist_m = float(xs[turn_idx])
+                        # We proved a turn exists in the future. Now find EXACTLY how far away it starts!
+                        # We trace from our current position until the path deviates visibly (> 3 degrees)
+                        turn_start_idx = 0
+                        for i in range(check_frames):
+                            if (raw_nav_cmd == "Turn left" and path_angles[i] > 3) or \
+                               (raw_nav_cmd == "Turn right" and path_angles[i] < -3):
+                                turn_start_idx = i
+                                break
+                                
+                        # Float distance representing how far forward to the exact turn entry
+                        dist_m = float(xs[turn_start_idx])
+                        dist_m = max(0.0, dist_m)
                         
                         if dist_m > 60.0:
-                            # If the turn is more than 60 meters away, it's too early to prompt
                             nav_cmd = "Go Straight"
                         else:
-                            # Allow it to correctly count all the way down to 0m natively
-                            dist_m = max(0.0, dist_m)
                             nav_cmd = f"{raw_nav_cmd} in {int(dist_m)}m"
                     else:
                         nav_cmd = "Go Straight"
