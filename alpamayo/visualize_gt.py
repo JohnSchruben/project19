@@ -12,7 +12,7 @@ import tkinter.filedialog as filedialog
 from PIL import Image
 import cv2
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'src/alpamayo_r1')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'src/alpamayo1_5')))
 from load_custom_dataset import load_custom_dataset
 
 class GTVisualizerApp:

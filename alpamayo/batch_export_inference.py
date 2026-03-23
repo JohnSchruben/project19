@@ -13,12 +13,9 @@ import textwrap
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
 
-import alpamayo_r1
-sys.modules['alpamayo1_5'] = alpamayo_r1
-
-from alpamayo_r1.load_custom_dataset import load_custom_dataset
-from alpamayo_r1 import helper
-from alpamayo_r1.models.alpamayo_r1 import AlpamayoR1
+from alpamayo1_5.load_custom_dataset import load_custom_dataset
+from alpamayo1_5 import helper
+from alpamayo1_5.models.alpamayo1_5 import Alpamayo1_5
 
 def get_default_route():
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'datasets'))
@@ -45,7 +42,7 @@ def main():
         return
 
     print("Loading Alpamayo model... (This will take a moment)")
-    model = AlpamayoR1.from_pretrained("nvidia/Alpamayo-1.5-10B", dtype=torch.bfloat16).to("cuda")
+    model = Alpamayo1_5.from_pretrained("nvidia/Alpamayo-1.5-10B", dtype=torch.bfloat16).to("cuda")
     processor = helper.get_processor(model.tokenizer)
 
     all_segments = sorted([d for d in glob.glob(os.path.join(args.route, 'segment_*')) if os.path.isdir(d)])

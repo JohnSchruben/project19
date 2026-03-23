@@ -23,7 +23,7 @@ from alpamayo_r1.models.base_model import ReasoningVLAConfig
 class AlpamayoR1Config(ReasoningVLAConfig):
     """Configuration for the Alpamayo R1 release model."""
 
-    model_type = "alpamayo1_5"
+    model_type = "alpamayo_r1"
 
     def __init__(
         self,

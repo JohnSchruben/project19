@@ -8,10 +8,8 @@ from tqdm import tqdm
 
 # Try importing from the installed alpamayo package or local clone
 try:
-    import alpamayo_r1
-    sys.modules['alpamayo1_5'] = alpamayo_r1
-    from alpamayo_r1.models.alpamayo_r1 import AlpamayoR1
-    from alpamayo_r1 import helper
+    from alpamayo1_5.models.alpamayo1_5 import Alpamayo1_5
+    from alpamayo1_5 import helper
 except ImportError:
     # Fallback: check if local 'alpamayo/src' exists and add to path
     import os
@@ -31,15 +29,15 @@ except ImportError:
     else:
         # Fallback to try importing anyway, maybe it is installed globally
         pass
-        print("Error: alpamayo_r1 package not found and local 'alpamayo/src' not found.")
+        print("Error: alpamayo1_5 package not found and local 'alpamayo/src' not found.")
         print("Please run ./setup_alpamayo.sh to clone the repository.")
         sys.exit(1)
 
 # Monkey-patch to fix 'tie_weights' compatibility issue with newer transformers
 # Newer transformers call tie_weights(recompute_mapping=False), which ReasoningVLA might not accept.
 try:
-    if hasattr(AlpamayoR1, 'tie_weights'):
-        original_tie_weights = AlpamayoR1.tie_weights
+    if hasattr(Alpamayo1_5, 'tie_weights'):
+        original_tie_weights = Alpamayo1_5.tie_weights
         
         def safe_tie_weights(self, *args, **kwargs):
             # Remove the arguments that cause the crash
@@ -50,8 +48,8 @@ try:
             return original_tie_weights(self, *args, **kwargs)
         
         # Apply the patch to the class
-        AlpamayoR1.tie_weights = safe_tie_weights
-        print("Patched AlpamayoR1.tie_weights for compatibility.")
+        Alpamayo1_5.tie_weights = safe_tie_weights
+        print("Patched Alpamayo1_5.tie_weights for compatibility.")
 except Exception as e:
     print(f"Warning: Failed to patch tie_weights: {e}")
 
@@ -320,7 +318,7 @@ def main():
     # Run inference
     try:
         # Load Model
-        model = AlpamayoR1.from_pretrained(
+        model = Alpamayo1_5.from_pretrained(
             args.model_id, 
             dtype=torch.bfloat16 if args.device == "cuda" else torch.float32
         ).to(args.device)

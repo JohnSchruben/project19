@@ -17,12 +17,6 @@
 # This script loads a dataset, runs inference, and computes the minADE.
 # It can be used to test the inference pipeline.
 
-import torch
-import numpy as np
-
-import alpamayo_r1
-sys.modules['alpamayo1_5'] = alpamayo_r1
-
 from alpamayo_r1.models.alpamayo_r1 import AlpamayoR1
 from alpamayo_r1.load_physical_aiavdataset import load_physical_aiavdataset
 from alpamayo_r1 import helper

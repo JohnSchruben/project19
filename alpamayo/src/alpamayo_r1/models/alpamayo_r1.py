@@ -328,5 +328,5 @@ class AlpamayoR1(ReasoningVLA):
         return pred_xyz, pred_rot
 
 
-AutoConfig.register("alpamayo1_5", AlpamayoR1Config)
+AutoConfig.register("alpamayo_r1", AlpamayoR1Config)
 AutoModel.register(AlpamayoR1Config, AlpamayoR1)
