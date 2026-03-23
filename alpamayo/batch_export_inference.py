@@ -25,6 +25,8 @@ def get_default_route():
         return dirs[0]
     return None
 
+import signal
+
 def main():
     parser = argparse.ArgumentParser(description="Headless batch video exporter with Alpamayo inference.")
     parser.add_argument("--route", type=str, default=get_default_route(), 
@@ -36,6 +38,16 @@ def main():
     parser.add_argument("--segment", type=str, default=None,
                         help="Process only a specific segment (e.g., 'segment_00')")
     args = parser.parse_args()
+    
+    # Store exporters globally to gracefully shut them down if the user hits Ctrl+C
+    _active_exporters = []
+    def graceful_exit(sig, frame):
+        print("\n\n[Ctrl+C Detected] Gracefully shutting down and saving video progress...")
+        for exporter in _active_exporters:
+            if exporter is not None:
+                exporter.release()
+        sys.exit(0)
+    signal.signal(signal.SIGINT, graceful_exit)
 
     if not args.route or not os.path.exists(args.route):
         print(f"Error: Route directory '{args.route}' not found.")
@@ -97,6 +109,7 @@ def main():
                 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
                 # Encoding at 40 FPS to force media players to respect 1x playback speed without speeding it up
                 out = cv2.VideoWriter(output_video_path, fourcc, 40.0, (w, h))
+                _active_exporters.append(out)
 
             try:
                 data = load_custom_dataset(seg_dir, local_idx)
