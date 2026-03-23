@@ -12,6 +12,10 @@ import matplotlib.pyplot as plt
 import textwrap
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
+
+import alpamayo_r1
+sys.modules['alpamayo1_5'] = alpamayo_r1
+
 from alpamayo_r1.load_custom_dataset import load_custom_dataset
 from alpamayo_r1 import helper
 from alpamayo_r1.models.alpamayo_r1 import AlpamayoR1

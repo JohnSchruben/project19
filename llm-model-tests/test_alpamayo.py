@@ -8,6 +8,8 @@ from tqdm import tqdm
 
 # Try importing from the installed alpamayo package or local clone
 try:
+    import alpamayo_r1
+    sys.modules['alpamayo1_5'] = alpamayo_r1
     from alpamayo_r1.models.alpamayo_r1 import AlpamayoR1
     from alpamayo_r1 import helper
 except ImportError:
