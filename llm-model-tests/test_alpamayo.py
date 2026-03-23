@@ -321,7 +321,7 @@ def main():
         model = Alpamayo1_5.from_pretrained(
             args.model_id, 
             dtype=torch.bfloat16 if args.device == "cuda" else torch.float32,
-            attn_implementation="sdpa"
+            attn_implementation="eager"
         ).to(args.device)
         
         processor = helper.get_processor(model.tokenizer)
