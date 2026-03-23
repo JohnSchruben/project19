@@ -14,7 +14,7 @@ import textwrap
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
 
 from alpamayo1_5.load_custom_dataset import load_custom_dataset
-from alpamayo1_5 import helper
+from alpamayo1_5 import helper, nav_utils
 from alpamayo1_5.models.alpamayo1_5 import Alpamayo1_5
 
 def get_default_route():
@@ -182,24 +182,6 @@ def main():
                     else:
                         nav_cmd = "Go Straight"
 
-            # Process images for Alpamayo
-            messages = helper.create_message(data["image_frames"].flatten(0, 1), nav_text=nav_cmd)
-            inputs = processor.apply_chat_template(
-                messages,
-                tokenize=True,
-                add_generation_prompt=False,
-                continue_final_message=True,
-                return_dict=True,
-                return_tensors="pt",
-            )
-            
-            model_inputs = {
-                "tokenized_data": inputs,
-                "ego_history_xyz": data["ego_history_xyz"],
-                "ego_history_rot": data["ego_history_rot"],
-            }
-            model_inputs = helper.to_device(model_inputs, device)
-
             # Inference
             if torch.cuda.is_available():
                 torch.cuda.manual_seed_all(42)
@@ -207,21 +189,27 @@ def main():
                 torch.manual_seed(42)
                 
             with torch.autocast(device_type=device, dtype=torch.bfloat16):
-                pred_xyz, pred_rot, extra = model.sample_trajectories_from_data_with_vlm_rollout_cfg_nav(
-                    data=copy.deepcopy(model_inputs),
+                nav_result = nav_utils.compare_nav_conditions(
+                    model=model,
+                    processor=processor,
+                    data=data,
+                    nav_text=nav_cmd,
+                    num_traj_samples=1,
                     top_p=0.98,
                     temperature=0.6,
-                    num_traj_samples=1,
                     max_generation_length=256,
                     return_extra=True,
-                    diffusion_kwargs={
-                        "use_classifier_free_guidance": True,
-                        "inference_guidance_weight": 1.5,
-                        "temperature": 0.6,
-                    }
+                    nav_inference_fn=model.sample_trajectories_from_data_with_vlm_rollout_cfg_nav,
+                    additional_nav_inference_kwargs={
+                        "diffusion_kwargs": {
+                            "use_classifier_free_guidance": True,
+                            "inference_guidance_weight": 1.5,
+                            "temperature": 0.6,
+                        }
+                    },
                 )
                 
-            cot = extra["cot"][0][0] # first sample, first batch
+            cot = nav_result.extra_with_nav["cot"][0][0] # first sample, first batch
             if isinstance(cot, np.ndarray):
                 cot = cot.item() # Extract string from numpy 0d array or array size 1
             if isinstance(cot, list):
@@ -233,20 +221,30 @@ def main():
             # Plotting GT vs Pred
             ax_export.clear()
             
-            prd_xyz = pred_xyz.cpu().numpy()[0, 0, 0] # shape (seq_len, 3)
+            def extract_prds(pred_tensor):
+                prd_xyz = pred_tensor.cpu().numpy()[0, 0, 0] # shape (seq_len, 3)
+                n_frames = min(args.frames, prd_xyz.shape[0])
+                p_x = np.concatenate(([0.0], prd_xyz[:n_frames, 0]))
+                p_y = np.concatenate(([0.0], prd_xyz[:n_frames, 1]))
+                return p_x, p_y
+                
+            n_gt_frames = min(args.frames, gt_xyz.shape[0])
+            gt_x = np.concatenate(([0.0], gt_xyz[:n_gt_frames, 0]))
+            gt_y = np.concatenate(([0.0], gt_xyz[:n_gt_frames, 1]))
             
-            n_frames = min(args.frames, gt_xyz.shape[0])
-            prd_len = min(args.frames, prd_xyz.shape[0])
-
-            gt_x_forward = np.concatenate(([0.0], gt_xyz[:n_frames, 0]))
-            gt_y_left = np.concatenate(([0.0], gt_xyz[:n_frames, 1]))
+            ax_export.plot([-y for y in gt_y], gt_x, marker='o', color='black', linewidth=2, label="GT")
             
-            prd_x_forward = np.concatenate(([0.0], prd_xyz[:prd_len, 0]))
-            prd_y_left = np.concatenate(([0.0], prd_xyz[:prd_len, 1]))
+            # with nav (Blue)
+            p_xw, p_yw = extract_prds(nav_result.pred_with_nav)
+            ax_export.plot([-y for y in p_yw], p_xw, marker='x', color='blue', linewidth=2, label="Nav")
+            
+            # counterfactual (Green)
+            p_xc, p_yc = extract_prds(nav_result.pred_counterfactual)
+            ax_export.plot([-y for y in p_yc], p_xc, marker='^', color='green', linewidth=2, label="Opp_Nav")
 
-            # Map coordinates: -Y vs X
-            ax_export.plot([-y for y in gt_y_left], gt_x_forward, marker='o', color='red', linewidth=2, label="GT")
-            ax_export.plot([-y for y in prd_y_left], prd_x_forward, marker='x', color='blue', linewidth=2, label="Pred")
+            # no nav (Red)
+            p_xn, p_yn = extract_prds(nav_result.pred_no_nav)
+            ax_export.plot([-y for y in p_yn], p_xn, marker='.', color='red', linewidth=2, label="No_Nav")
             
             ax_export.plot(0, 0, marker='*', color='black', markersize=15)
             
