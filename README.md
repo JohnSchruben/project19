@@ -26,11 +26,12 @@ Side Task: We will program an automatic data preparation pipeline for autonomous
 ### Technologies Used
 - Python - programming language for development
 - Ollama - open-source tool for running LLMs locally
-- GPT-OSS - OpenAI's open-source LLM for local running
+- Alpamayo - NVIDIA's AI model for self driving
 
 ### Setup Instructions
 1. Download and install the technologies listed above from their sources.
 2. Clone the repo to your local machine.
+3. See instuctions below for the pipeline.
 ---
 ### Roadmap
 Sprint 1
@@ -114,3 +115,11 @@ This will:
 2.  Run the custom `modeld` script to capture images and features to `datasets/`.
 
 See `Openpilot_Custom/docs/DATA_PREPARATION_GUIDE.md` for more details on the data structure and next steps (labeling).
+
+#### 3. Run Automatic Data Labeling
+
+See `CVAT_setup\README.md` for instructions on how to complete this step.
+
+#### 4. Data Label Manual Correction
+
+See `CVAT_Manual_Annotations_Guide.pdf` for instructions on how to complete this step.
