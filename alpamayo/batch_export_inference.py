@@ -93,7 +93,8 @@ def main():
             if out is None:
                 h, w, _ = img_np.shape
                 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-                out = cv2.VideoWriter(output_video_path, fourcc, 20.0, (w, h))
+                # Encoding at 40 FPS to force media players to respect 1x playback speed without speeding it up
+                out = cv2.VideoWriter(output_video_path, fourcc, 40.0, (w, h))
 
             try:
                 data = load_custom_dataset(seg_dir, local_idx)
@@ -109,38 +110,42 @@ def main():
                 gt_rot = data["ego_future_rot"][0, 0].numpy()
                 full_frames = gt_rot.shape[0]
                 if full_frames > 0:
-                    # Determine target angle from vehicle heading (Rotation matrices)
-                    # Limit the lookahead to the next 160 frames (8 seconds) to catch turns earlier during braking
-                    check_frames = min(160, full_frames)
-                    headings = np.degrees(np.arctan2(gt_rot[:check_frames, 1, 0], gt_rot[:check_frames, 0, 0]))
+                    # Use XY displacement instead of rotation metrics to find path curvature
+                    # X is forward, Y is left. By doing arctan2(Y, X), we find the path's true driving heading.
+                    check_frames = min(200, full_frames) # Look heavily into the future
+                    xs = gt_xyz[:check_frames, 0]
+                    ys = gt_xyz[:check_frames, 1]
                     
-                    # Iterate chronologically to find the FIRST turn in the immediate future window
+                    path_angles = np.degrees(np.arctan2(ys, xs))
+                    distances = np.hypot(xs, ys)
+                    
                     raw_nav_cmd = "Go Straight"
                     turn_idx = -1
-                    for idx, hdg in enumerate(headings):
-                        if hdg > 15:
+                    for idx in range(check_frames):
+                        if distances[idx] < 5.0:
+                            continue # Ignore angles before the car has moved at least 5 meters
+                            
+                        if path_angles[idx] > 15:
                             raw_nav_cmd = "Turn left"
                             turn_idx = idx
                             break
-                        elif hdg < -15:
+                        elif path_angles[idx] < -15:
                             raw_nav_cmd = "Turn right"
                             turn_idx = idx
                             break
                             
                     if raw_nav_cmd != "Go Straight":
                         # Alpamayo 1.5 expects nav conditioned strings with distance, e.g. "Turn right in 30m"
-                        dist_m = float(data["ego_future_xyz"][0, 0, turn_idx, 0])
-                        # If distance is negative or extremely small, clamp it
-                        dist_m = max(5.0, dist_m)
+                        # Float distance representing how far forward from CURRENT position the turn happens
+                        dist_m = float(xs[turn_idx])
                         
-                        nav_cmd = f"{raw_nav_cmd} in {int(dist_m)}m"
-                        active_turn_cmd = nav_cmd
-                        turn_cmd_frames_left = 100 # Hold for 5 seconds (100 video frames)
-                    elif turn_cmd_frames_left > 0:
-                        nav_cmd = active_turn_cmd
-                        turn_cmd_frames_left -= 1
+                        if dist_m > 60.0:
+                            # If the turn is more than 60 meters away, it's too early to prompt
+                            nav_cmd = "Go Straight"
+                        else:
+                            dist_m = max(1.0, dist_m)
+                            nav_cmd = f"{raw_nav_cmd} in {int(dist_m)}m"
                     else:
-                        active_turn_cmd = "Go Straight"
                         nav_cmd = "Go Straight"
 
             # Process images for Alpamayo
@@ -252,7 +257,10 @@ def main():
             # Thus, the color tuple here MUST be RGB! Orange in RGB is (255, 165, 0).
             cv2.putText(img_np, f"Nav Command: {nav_cmd}", (20, y_text + 15), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 165, 0), 2)
                 
-            out.write(cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR))
+            # Convert once and write twice to effectively play 20Hz frames at 40 FPS seamlessly
+            bgr_frame = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
+            out.write(bgr_frame)
+            out.write(bgr_frame)
             
         if out is not None:
             out.release()
