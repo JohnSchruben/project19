@@ -81,6 +81,8 @@ def main():
 
         active_turn_cmd = "Go Straight"
         turn_cmd_frames_left = 0
+        turn_dist_m = 0.0
+        turn_active_frames = 0
 
         for local_idx in range(num_frames_seg):
             # Load basic image for background
@@ -112,7 +114,6 @@ def main():
                 full_frames = gt_rot.shape[0]
                 if full_frames > 0:
                     # Use XY displacement instead of rotation metrics to find path curvature
-                    # X is forward, Y is left. By doing arctan2(Y, X), we find the path's true driving heading.
                     check_frames = min(200, full_frames) # Look heavily into the future
                     xs = gt_xyz[:check_frames, 0]
                     ys = gt_xyz[:check_frames, 1]
@@ -120,34 +121,47 @@ def main():
                     path_angles = np.degrees(np.arctan2(ys, xs))
                     distances = np.hypot(xs, ys)
                     
+                    far_idx = distances > 5.0
                     raw_nav_cmd = "Go Straight"
-                    for idx in range(check_frames):
-                        if distances[idx] > 5.0:
-                            if path_angles[idx] > 15:
-                                raw_nav_cmd = "Turn left"
-                                break
-                            elif path_angles[idx] < -15:
-                                raw_nav_cmd = "Turn right"
-                                break
+                    if np.any(far_idx):
+                        if np.max(path_angles[far_idx]) > 15:
+                            raw_nav_cmd = "Turn left"
+                        elif np.min(path_angles[far_idx]) < -15:
+                            raw_nav_cmd = "Turn right"
                             
                     if raw_nav_cmd != "Go Straight":
-                        # We proved a turn exists in the future. Now find EXACTLY how far away it starts!
-                        # We trace from our current position until the path deviates visibly (> 3 degrees)
+                        # Find exactly where the turn begins (first point deviating > 2 degrees)
                         turn_start_idx = 0
                         for i in range(check_frames):
-                            if (raw_nav_cmd == "Turn left" and path_angles[i] > 3) or \
-                               (raw_nav_cmd == "Turn right" and path_angles[i] < -3):
+                            if distances[i] < 1.0: continue
+                            if (raw_nav_cmd == "Turn left" and path_angles[i] > 2) or \
+                               (raw_nav_cmd == "Turn right" and path_angles[i] < -2):
                                 turn_start_idx = i
                                 break
                                 
-                        # Float distance representing how far forward to the exact turn entry
-                        dist_m = float(xs[turn_start_idx])
-                        dist_m = max(0.0, dist_m)
+                        new_dist = max(0.0, float(xs[turn_start_idx]))
                         
-                        if dist_m > 60.0:
-                            nav_cmd = "Go Straight"
+                        if active_turn_cmd != raw_nav_cmd:
+                            if new_dist < 80.0:
+                                active_turn_cmd = raw_nav_cmd
+                                turn_dist_m = new_dist
+                                turn_active_frames = 60 # Sticky hold for 3 seconds
                         else:
-                            nav_cmd = f"{raw_nav_cmd} in {int(dist_m)}m"
+                            # Update the absolute distance to the turn junction.
+                            # Because relative trajectory geometry plateaus as the car steers into the curve,
+                            # we ensure it actively counts down to 0m mathematically by bleeding it.
+                            turn_dist_m = min(turn_dist_m, new_dist)
+                            turn_dist_m = max(0.0, turn_dist_m - 0.3) 
+                            turn_active_frames = 60
+                    else:
+                        if turn_active_frames > 0:
+                            turn_active_frames -= 1
+                            turn_dist_m = 0.0 # Pin to 0m because we are literally riding out the apex
+                        else:
+                            active_turn_cmd = "Go Straight"
+                            
+                    if active_turn_cmd != "Go Straight":
+                        nav_cmd = f"{active_turn_cmd} in {int(turn_dist_m)}m"
                     else:
                         nav_cmd = "Go Straight"
 
