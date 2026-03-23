@@ -304,7 +304,7 @@ def main():
     parser = argparse.ArgumentParser(description="Test NVIDIA Alpamayo Model")
     parser.add_argument("--image", type=str, default="car-on-road-3.jpg", help="Path to input image or directory")
     parser.add_argument("--prompt", type=str, default="You are an autonomous driving agent. Analyze the scene and plan a safe trajectory for the ego vehicle.", help="Text prompt")
-    parser.add_argument("--model-id", type=str, default="nvidia/Alpamayo-R1-10B", help="Hugging Face Model ID")
+    parser.add_argument("--model-id", type=str, default="nvidia/Alpamayo-1.5-10B", help="Hugging Face Model ID")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu", help="Device to run on")
     parser.add_argument("--output", type=str, default="alpamayo_results.json", help="Output JSON file")
     parser.add_argument("--history-len", type=int, default=1, help="Number of visual frames to use as context (default: 1)")

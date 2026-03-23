@@ -4,7 +4,7 @@
 
 ### Bridging Reasoning and Action Prediction for Generalizable Autonomous Driving
 
-[![HuggingFace](https://img.shields.io/badge/🤗%20Model-Alpamayo--R1--10B-blue)](https://huggingface.co/nvidia/Alpamayo-R1-10B)
+[![HuggingFace](https://img.shields.io/badge/🤗%20Model-Alpamayo--1.5--10B-blue)](https://huggingface.co/nvidia/Alpamayo-1.5-10B)
 [![arXiv](https://img.shields.io/badge/arXiv-2511.00088-b31b1b.svg)](https://arxiv.org/abs/2511.00088)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](./LICENSE)
 
@@ -12,7 +12,7 @@
 
 _Note: Following the release of [NVIDIA Alpamayo](https://nvidianews.nvidia.com/news/alpamayo-autonomous-vehicle-development) at CES 2026, Alpamayo-R1 has been renamed to Alpamayo 1._
 
-> **📖 Please read the [HuggingFace Model Card](https://huggingface.co/nvidia/Alpamayo-R1-10B) first!**
+> **📖 Please read the [HuggingFace Model Card](https://huggingface.co/nvidia/Alpamayo-1.5-10B) first!**
 > The model card contains comprehensive details on model architecture, inputs/outputs, licensing, and tested hardware configurations. This GitHub README focuses on setup, usage, and frequently asked questions.
 
 ## Requirements
@@ -46,7 +46,7 @@ uv sync --active
 
 The model requires access to gated resources. Request access here:
 - 🤗 [Physical AI AV Dataset](https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles)
-- 🤗 [Alpamayo Model Weights](https://huggingface.co/nvidia/Alpamayo-R1-10B)
+- 🤗 [Alpamayo Model Weights](https://huggingface.co/nvidia/Alpamayo-1.5-10B)
 
 Then authenticate using the HuggingFace CLI:
 
@@ -130,7 +130,7 @@ You need an NVIDIA GPU with at least **24 GB VRAM** for inference. Tested config
 <details>
 <summary><strong>Can I use this model in production / commercial applications?</strong></summary>
 
-No. The model weights are released under a **non-commercial license**. This release is intended for research, experimentation, and evaluation purposes only. See the [License](#license) section and the [HuggingFace Model Card](https://huggingface.co/nvidia/Alpamayo-R1-10B) for details.
+No. The model weights are released under a **non-commercial license**. This release is intended for research, experimentation, and evaluation purposes only. See the [License](#license) section and the [HuggingFace Model Card](https://huggingface.co/nvidia/Alpamayo-1.5-10B) for details.
 
 </details>
 
@@ -180,7 +180,7 @@ If you encounter OOM errors:
 ## License
 
 - **Inference code**: Apache License 2.0 - see [LICENSE](./LICENSE) for details.
-- **Model weights**: Non-commercial license - see [HuggingFace Model Card](https://huggingface.co/nvidia/Alpamayo-R1-10B) for details.
+- **Model weights**: Non-commercial license - see [HuggingFace Model Card](https://huggingface.co/nvidia/Alpamayo-1.5-10B) for details.
 
 ## Disclaimer
 

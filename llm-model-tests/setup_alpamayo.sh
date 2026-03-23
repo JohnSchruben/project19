@@ -75,9 +75,9 @@ python3 -m pip install git+https://github.com/huggingface/transformers.git --upg
 echo "Attempting to install physical_ai_av (optional/manual)..."
 pip install physical_ai_av || echo "Warning: physical_ai_av failed to install. Proceeding without it." 
 
-echo "Downloading NVIDIA Alpamayo-R1-10B model..."
+echo "Downloading NVIDIA Alpamayo-1.5-10B model..."
 # Explicitly download the model (snapshot) to the cache
-hf download nvidia/Alpamayo-R1-10B --exclude "*.bin"
+hf download nvidia/Alpamayo-1.5-10B --exclude "*.bin"
 
 echo ""
 echo "Setup complete."
