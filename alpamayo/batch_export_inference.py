@@ -183,12 +183,7 @@ def main():
                     else:
                         nav_cmd = "Go Straight"
 
-            # Inference
-            if torch.cuda.is_available():
-                torch.cuda.manual_seed_all(42)
-            else:
-                torch.manual_seed(42)
-                
+            # Inference (Removed fixed seed to allow natural diversity)
             messages_nav = helper.create_message(
                 data["image_frames"].flatten(0, 1),
                 camera_indices=data.get("camera_indices"),
@@ -210,19 +205,56 @@ def main():
                 },
                 device,
             )
+            
+            # Setup counterfactual opposite command
+            opp_nav_cmd = nav_utils.swap_direction(nav_cmd)
+            messages_opp = helper.create_message(
+                data["image_frames"].flatten(0, 1),
+                camera_indices=data.get("camera_indices"),
+                nav_text=opp_nav_cmd,
+            )
+            inputs_opp = processor.apply_chat_template(
+                messages_opp,
+                tokenize=True,
+                add_generation_prompt=False,
+                continue_final_message=True,
+                return_dict=True,
+                return_tensors="pt",
+            )
+            model_inputs_opp = helper.to_device(
+                {
+                    "tokenized_data": inputs_opp,
+                    "ego_history_xyz": data["ego_history_xyz"],
+                    "ego_history_rot": data["ego_history_rot"],
+                },
+                device,
+            )
 
             with torch.autocast(device_type=device, dtype=torch.bfloat16):
                 pred_xyz_nav, pred_rot_nav, extra_nav = model.sample_trajectories_from_data_with_vlm_rollout_cfg_nav(
                     data=model_inputs_nav,
                     top_p=0.98,
-                    temperature=0.6,
+                    temperature=1.0,
                     num_traj_samples=1,
                     max_generation_length=256,
                     return_extra=True,
                     diffusion_kwargs={
                         "use_classifier_free_guidance": True,
                         "inference_guidance_weight": 2.5,
-                        "temperature": 0.6,
+                        "temperature": 1.0,
+                    }
+                )
+                pred_xyz_opp, _, _ = model.sample_trajectories_from_data_with_vlm_rollout_cfg_nav(
+                    data=model_inputs_opp,
+                    top_p=0.98,
+                    temperature=1.0,
+                    num_traj_samples=1,
+                    max_generation_length=256,
+                    return_extra=False,
+                    diffusion_kwargs={
+                        "use_classifier_free_guidance": True,
+                        "inference_guidance_weight": 2.5,
+                        "temperature": 1.0,
                     }
                 )
                 
@@ -254,6 +286,10 @@ def main():
             # with nav (Blue)
             p_xw, p_yw = extract_prds(pred_xyz_nav)
             ax_export.plot([-y for y in p_yw], p_xw, marker='x', color='blue', linewidth=2, label="Nav")
+            
+            # counterfactual (Lime)
+            p_xc, p_yc = extract_prds(pred_xyz_opp)
+            ax_export.plot([-y for y in p_yc], p_xc, marker='^', color='lime', linewidth=2, label="Opp_Nav")
             
             ax_export.plot(0, 0, marker='*', color='black', markersize=15)
             
