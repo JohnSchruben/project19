@@ -221,7 +221,7 @@ def main():
                     return_extra=True,
                     diffusion_kwargs={
                         "use_classifier_free_guidance": True,
-                        "inference_guidance_weight": 1.5,
+                        "inference_guidance_weight": 2.5,
                         "temperature": 0.6,
                     }
                 )
@@ -249,7 +249,7 @@ def main():
             gt_x = np.concatenate(([0.0], gt_xyz[:n_gt_frames, 0]))
             gt_y = np.concatenate(([0.0], gt_xyz[:n_gt_frames, 1]))
             
-            ax_export.plot([-y for y in gt_y], gt_x, marker='o', color='black', linewidth=2, label="GT")
+            ax_export.plot([-y for y in gt_y], gt_x, marker='o', color='red', linewidth=2, label="GT")
             
             # with nav (Blue)
             p_xw, p_yw = extract_prds(pred_xyz_nav)
