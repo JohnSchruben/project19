@@ -1,4 +1,5 @@
 import os
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 import sys
 import glob
 import json
@@ -188,25 +189,44 @@ def main():
             else:
                 torch.manual_seed(42)
                 
+            messages_nav = helper.create_message(
+                data["image_frames"].flatten(0, 1),
+                camera_indices=data.get("camera_indices"),
+                nav_text=nav_cmd,
+            )
+            inputs_nav = processor.apply_chat_template(
+                messages_nav,
+                tokenize=True,
+                add_generation_prompt=False,
+                continue_final_message=True,
+                return_dict=True,
+                return_tensors="pt",
+            )
+            model_inputs_nav = helper.to_device(
+                {
+                    "tokenized_data": inputs_nav,
+                    "ego_history_xyz": data["ego_history_xyz"],
+                    "ego_history_rot": data["ego_history_rot"],
+                },
+                device,
+            )
+
             with torch.autocast(device_type=device, dtype=torch.bfloat16):
-                nav_result = nav_utils.compare_nav_conditions(
-                    model=model,
-                    processor=processor,
-                    data=data,
-                    nav_text=nav_cmd,
-                    num_traj_samples=1,
+                pred_xyz_nav, pred_rot_nav, extra_nav = model.sample_trajectories_from_data_with_vlm_rollout_cfg_nav(
+                    data=model_inputs_nav,
                     top_p=0.98,
                     temperature=0.6,
+                    num_traj_samples=1,
                     max_generation_length=256,
                     return_extra=True,
-                    additional_nav_inference_kwargs={
-                        "diffusion_kwargs": {
-                            "temperature": 0.6,
-                        }
-                    },
+                    diffusion_kwargs={
+                        "use_classifier_free_guidance": True,
+                        "inference_guidance_weight": 1.5,
+                        "temperature": 0.6,
+                    }
                 )
                 
-            cot = nav_result.extra_with_nav["cot"][0][0] # first sample, first batch
+            cot = extra_nav["cot"][0][0] # first sample, first batch
             if isinstance(cot, np.ndarray):
                 cot = cot.item() # Extract string from numpy 0d array or array size 1
             if isinstance(cot, list):
@@ -232,16 +252,8 @@ def main():
             ax_export.plot([-y for y in gt_y], gt_x, marker='o', color='black', linewidth=2, label="GT")
             
             # with nav (Blue)
-            p_xw, p_yw = extract_prds(nav_result.pred_with_nav)
+            p_xw, p_yw = extract_prds(pred_xyz_nav)
             ax_export.plot([-y for y in p_yw], p_xw, marker='x', color='blue', linewidth=2, label="Nav")
-            
-            # counterfactual (Green)
-            p_xc, p_yc = extract_prds(nav_result.pred_counterfactual)
-            ax_export.plot([-y for y in p_yc], p_xc, marker='^', color='green', linewidth=2, label="Opp_Nav")
-
-            # no nav (Red)
-            p_xn, p_yn = extract_prds(nav_result.pred_no_nav)
-            ax_export.plot([-y for y in p_yn], p_xn, marker='.', color='red', linewidth=2, label="No_Nav")
             
             ax_export.plot(0, 0, marker='*', color='black', markersize=15)
             
