@@ -244,7 +244,7 @@ def main():
                         "temperature": 1.0,
                     }
                 )
-                pred_xyz_opp, _, _ = model.sample_trajectories_from_data_with_vlm_rollout_cfg_nav(
+                pred_xyz_opp, _ = model.sample_trajectories_from_data_with_vlm_rollout_cfg_nav(
                     data=model_inputs_opp,
                     top_p=0.98,
                     temperature=1.0,
