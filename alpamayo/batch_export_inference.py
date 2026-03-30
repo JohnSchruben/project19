@@ -183,7 +183,10 @@ def main():
                     else:
                         nav_cmd = "Go Straight"
 
-            # Inference (Removed fixed seed to allow natural diversity)
+            # Set fixed seed to match the nav notebook exactly for deterministic conditional inference
+            torch.cuda.manual_seed_all(42)
+            
+            # Inference
             messages_nav = helper.create_message(
                 data["image_frames"].flatten(0, 1),
                 camera_indices=data.get("camera_indices"),
@@ -234,27 +237,27 @@ def main():
                 pred_xyz_nav, pred_rot_nav, extra_nav = model.sample_trajectories_from_data_with_vlm_rollout_cfg_nav(
                     data=model_inputs_nav,
                     top_p=0.98,
-                    temperature=1.0,
+                    temperature=0.6,
                     num_traj_samples=1,
                     max_generation_length=256,
                     return_extra=True,
                     diffusion_kwargs={
                         "use_classifier_free_guidance": True,
-                        "inference_guidance_weight": 2.5,
-                        "temperature": 1.0,
+                        "inference_guidance_weight": 1.5,
+                        "temperature": 0.6,
                     }
                 )
                 pred_xyz_opp, _ = model.sample_trajectories_from_data_with_vlm_rollout_cfg_nav(
                     data=model_inputs_opp,
                     top_p=0.98,
-                    temperature=1.0,
+                    temperature=0.6,
                     num_traj_samples=1,
                     max_generation_length=256,
                     return_extra=False,
                     diffusion_kwargs={
                         "use_classifier_free_guidance": True,
-                        "inference_guidance_weight": 2.5,
-                        "temperature": 1.0,
+                        "inference_guidance_weight": 1.5,
+                        "temperature": 0.6,
                     }
                 )
                 
