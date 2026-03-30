@@ -119,12 +119,13 @@ def main():
                 out.write(cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR))
                 continue
 
+            gt_rot = data["ego_future_rot"][0, 0].numpy()
+            gt_xyz = data["ego_future_xyz"][0, 0].numpy()
+            
             # Determine navigation command dynamically if not provided
             nav_cmd = args.command
             if nav_cmd is None:
                 nav_cmd = "Go Straight" # Default
-                gt_rot = data["ego_future_rot"][0, 0].numpy()
-                gt_xyz = data["ego_future_xyz"][0, 0].numpy()
                 full_frames = gt_rot.shape[0]
                 if full_frames > 0:
                     # Use XY displacement instead of rotation metrics to find path curvature
