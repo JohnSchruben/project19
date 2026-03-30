@@ -239,12 +239,12 @@ def main():
                     data=model_inputs_nav,
                     top_p=0.98,
                     temperature=0.6,
-                    num_traj_samples=1,
+                    num_traj_samples=6,
                     max_generation_length=256,
                     return_extra=True,
                     diffusion_kwargs={
                         "use_classifier_free_guidance": True,
-                        "inference_guidance_weight": 1.5,
+                        "inference_guidance_weight": 3.5,
                         "temperature": 0.6,
                     }
                 )
@@ -252,12 +252,12 @@ def main():
                     data=model_inputs_opp,
                     top_p=0.98,
                     temperature=0.6,
-                    num_traj_samples=1,
+                    num_traj_samples=6,
                     max_generation_length=256,
                     return_extra=False,
                     diffusion_kwargs={
                         "use_classifier_free_guidance": True,
-                        "inference_guidance_weight": 1.5,
+                        "inference_guidance_weight": 3.5,
                         "temperature": 0.6,
                     }
                 )
@@ -275,7 +275,8 @@ def main():
             ax_export.clear()
             
             def extract_prds(pred_tensor):
-                prd_xyz = pred_tensor.cpu().numpy()[0, 0, 0] # shape (seq_len, 3)
+                # Average across the num_traj_samples dimension (dim 2)
+                prd_xyz = pred_tensor.mean(dim=2).cpu().numpy()[0, 0] # shape (seq_len, 3)
                 n_frames = min(args.frames, prd_xyz.shape[0])
                 p_x = np.concatenate(([0.0], prd_xyz[:n_frames, 0]))
                 p_y = np.concatenate(([0.0], prd_xyz[:n_frames, 1]))
