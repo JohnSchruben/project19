@@ -199,11 +199,8 @@ def main():
                     temperature=0.6,
                     max_generation_length=256,
                     return_extra=True,
-                    nav_inference_fn=model.sample_trajectories_from_data_with_vlm_rollout_cfg_nav,
                     additional_nav_inference_kwargs={
                         "diffusion_kwargs": {
-                            "use_classifier_free_guidance": True,
-                            "inference_guidance_weight": 1.5,
                             "temperature": 0.6,
                         }
                     },
