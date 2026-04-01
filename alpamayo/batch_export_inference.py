@@ -274,7 +274,9 @@ def main():
                 if len(cot) > 0: cot = " ".join(map(str, cot))
                 else: cot = ""
             cot = str(cot).strip()
-            print(f"[{seg_name} | Frame {local_idx}] Cmd: {nav_cmd} | Reasoning: {cot}")
+            
+            # Use ANSI escape codes for coloring (Green for Command, TrueColor Orange for Reasoning)
+            print(f"[{seg_name} | Frame {local_idx}] Cmd: \033[92m{nav_cmd}\033[0m | Reasoning: \033[38;2;255;165;0m{cot}\033[0m")
 
             # Plotting GT vs Pred
             ax_export.clear()
