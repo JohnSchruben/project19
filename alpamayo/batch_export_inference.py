@@ -40,15 +40,13 @@ def main():
                         help="Process only a specific segment (e.g., 'segment_00')")
     args = parser.parse_args()
     
-    # Store exporters globally to gracefully shut them down if the user hits Ctrl+C
-    _active_exporters = []
+    # Safe interrupt flag to gracefully finish the current frame and save the video seamlessly
+    interrupt_flag = [False]
     def graceful_exit(sig, frame):
-        print("\n\n[Ctrl+C Detected] Gracefully shutting down and saving video progress...")
-        for exporter in _active_exporters:
-            if exporter is not None:
-                exporter.release()
-        sys.exit(0)
+        print("\n\n[Stop Signal Detected] Finishing the current frame and cleanly saving video, please wait...")
+        interrupt_flag[0] = True
     signal.signal(signal.SIGINT, graceful_exit)
+    signal.signal(signal.SIGTERM, graceful_exit)
 
     if not args.route or not os.path.exists(args.route):
         print(f"Error: Route directory '{args.route}' not found.")
@@ -98,6 +96,9 @@ def main():
         turn_active_frames = 0
 
         for local_idx in range(num_frames_seg):
+            if interrupt_flag[0]:
+                break
+            
             # Load basic image for background
             img_path = os.path.join(raw_dir, f"{local_idx:06d}.png")
             if os.path.exists(img_path):
@@ -110,7 +111,6 @@ def main():
                 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
                 # Encoding at 40 FPS to force media players to respect 1x playback speed without speeding it up
                 out = cv2.VideoWriter(output_video_path, fourcc, 40.0, (w, h))
-                _active_exporters.append(out)
 
             try:
                 data = load_custom_dataset(seg_dir, local_idx)
@@ -360,6 +360,10 @@ def main():
             print(f"Finished exporting {output_video_path}")
             
         plt.close(fig_export)
+        
+        if interrupt_flag[0]:
+            print("Processing stopped early by user.")
+            break
 
 if __name__ == "__main__":
     main()
