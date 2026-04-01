@@ -264,9 +264,14 @@ def main():
                 
             cot = extra_nav["cot"][0][0] # first sample, first batch
             if isinstance(cot, np.ndarray):
-                cot = cot.item() # Extract string from numpy 0d array or array size 1
+                if cot.size == 1:
+                    cot = cot.item()
+                elif cot.size == 0:
+                    cot = ""
+                else:
+                    cot = " ".join(map(str, cot.flatten()))
             if isinstance(cot, list):
-                if len(cot) > 0: cot = str(cot[0])
+                if len(cot) > 0: cot = " ".join(map(str, cot))
                 else: cot = ""
             cot = str(cot).strip()
             print(f"[{seg_name} | Frame {local_idx}] Cmd: {nav_cmd} | Reasoning: {cot}")
