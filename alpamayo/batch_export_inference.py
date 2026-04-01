@@ -57,7 +57,7 @@ def main():
     model = Alpamayo1_5.from_pretrained(
         "nvidia/Alpamayo-1.5-10B", 
         dtype=torch.bfloat16,
-        attn_implementation="sdpa").to(device)
+        attn_implementation="eager").to(device)
     processor = helper.get_processor(model.tokenizer)
 
     all_segments = sorted([d for d in glob.glob(os.path.join(args.route, 'segment_*')) if os.path.isdir(d)])
