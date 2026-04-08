@@ -118,13 +118,34 @@ def run_nav_inference(
     return pred_xyz_nav, pred_rot_nav, extra_nav
 
 
-def mean_prediction_xy(pred_tensor, num_frames: int) -> tuple[np.ndarray, np.ndarray, int]:
+def select_prediction_xy(
+    pred_tensor,
+    nav_cmd: str,
+    num_frames: int,
+) -> tuple[np.ndarray, np.ndarray, int]:
     pred_np = pred_tensor.detach().cpu().numpy()[0, 0]
-    mean_sample = pred_np.mean(axis=0)
-    n_frames = min(num_frames, mean_sample.shape[0])
-    mean_x = np.concatenate(([0.0], mean_sample[:n_frames, 0]))
-    mean_y = np.concatenate(([0.0], mean_sample[:n_frames, 1]))
-    return mean_x, mean_y, n_frames
+    if pred_np.shape[0] == 0:
+        return np.array([0.0]), np.array([0.0]), 0
+
+    nav_lower = nav_cmd.lower()
+    final_lateral = pred_np[:, -1, 1]
+    final_forward = pred_np[:, -1, 0]
+
+    if "left" in nav_lower:
+        sample_idx = int(np.argmax(final_lateral))
+    elif "right" in nav_lower:
+        sample_idx = int(np.argmin(final_lateral))
+    elif "straight" in nav_lower:
+        sample_idx = int(np.argmin(np.abs(final_lateral)))
+    else:
+        # Fallback to the sample that goes furthest forward while staying centered.
+        sample_idx = int(np.argmax(final_forward - np.abs(final_lateral)))
+
+    selected = pred_np[sample_idx]
+    n_frames = min(num_frames, selected.shape[0])
+    pred_x = np.concatenate(([0.0], selected[:n_frames, 0]))
+    pred_y = np.concatenate(([0.0], selected[:n_frames, 1]))
+    return pred_x, pred_y, n_frames
 
 
 def plot_dotted_path(ax, xs: np.ndarray, ys: np.ndarray, color: str, label: str):
@@ -387,8 +408,8 @@ def main():
             ax_export.clear()
             pred_plot_data = []
             max_common_frames = gt_xyz.shape[0]
-            for label, _, pred_xyz in nav_runs:
-                pred_x, pred_y, pred_frames = mean_prediction_xy(pred_xyz, args.frames)
+            for label, cmd_text, pred_xyz in nav_runs:
+                pred_x, pred_y, pred_frames = select_prediction_xy(pred_xyz, cmd_text, args.frames)
                 pred_plot_data.append((label, pred_x, pred_y, pred_frames))
                 max_common_frames = min(max_common_frames, pred_frames)
 
