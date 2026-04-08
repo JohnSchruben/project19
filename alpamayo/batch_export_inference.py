@@ -13,14 +13,13 @@ import textwrap
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
 
 from alpamayo1_5.load_custom_dataset import load_custom_dataset
-from alpamayo1_5 import helper, nav_utils
+from alpamayo1_5 import helper
 from alpamayo1_5.models.alpamayo1_5 import Alpamayo1_5
 
 
 TURN_COLOR_MAP = {
     "Ground Truth": "red",
     "Nav Command": "lime",
-    "Opposite Command": "deeppink",
     "Command": "lime",
 }
 
@@ -55,16 +54,6 @@ def nav_label(nav_cmd: str) -> str:
     if "left" in nav_lower or "right" in nav_lower or "straight" in nav_lower:
         return "Nav Command"
     return "Command"
-
-
-def build_nav_and_opposite_commands(nav_cmd: str) -> list[tuple[str, str]]:
-    nav_lower = nav_cmd.lower()
-    if "left" in nav_lower or "right" in nav_lower:
-        return [
-            ("Nav Command", nav_cmd),
-            ("Opposite Command", nav_utils.swap_direction(nav_cmd)),
-        ]
-    return [("Nav Command", nav_cmd)]
 
 
 def run_nav_inference(
@@ -360,49 +349,25 @@ def main():
             # Set fixed seed to match the nav notebook exactly for deterministic conditional inference
             torch.cuda.manual_seed_all(42)
 
-            compare_turn_options = (
-                any(word in nav_cmd.lower() for word in ("left", "right"))
-            )
             nav_runs = []
             overlay_summary = ""
             cot = ""
-
-            if compare_turn_options:
-                for label, cmd_text in build_nav_and_opposite_commands(nav_cmd):
-                    pred_xyz_nav, _, extra_nav = run_nav_inference(
-                        model=model,
-                        processor=processor,
-                        data=data,
-                        device=device,
-                        nav_cmd=cmd_text,
-                        num_traj_samples=args.num_traj_samples,
-                        guidance_weight=args.guidance_weight,
-                    )
-                    nav_runs.append((label, cmd_text, pred_xyz_nav))
-                    cot_text = extract_cot(extra_nav)
-                    print(
-                        f"[{seg_name} | Frame {local_idx}] {label}: "
-                        f"\033[92m{cmd_text}\033[0m | Reasoning: "
-                        f"\033[38;2;255;165;0m{cot_text}\033[0m"
-                    )
-                overlay_summary = "Nav Compare: Command vs Opposite"
-            else:
-                pred_xyz_nav, _, extra_nav = run_nav_inference(
-                    model=model,
-                    processor=processor,
-                    data=data,
-                    device=device,
-                    nav_cmd=nav_cmd,
-                    num_traj_samples=args.num_traj_samples,
-                    guidance_weight=args.guidance_weight,
-                )
-                nav_runs.append((nav_label(nav_cmd), nav_cmd, pred_xyz_nav))
-                cot = extract_cot(extra_nav)
-                overlay_summary = f"Nav Command: {nav_cmd}"
-                print(
-                    f"[{seg_name} | Frame {local_idx}] Cmd: \033[92m{nav_cmd}\033[0m | "
-                    f"Reasoning: \033[38;2;255;165;0m{cot}\033[0m"
-                )
+            pred_xyz_nav, _, extra_nav = run_nav_inference(
+                model=model,
+                processor=processor,
+                data=data,
+                device=device,
+                nav_cmd=nav_cmd,
+                num_traj_samples=args.num_traj_samples,
+                guidance_weight=args.guidance_weight,
+            )
+            nav_runs.append((nav_label(nav_cmd), nav_cmd, pred_xyz_nav))
+            cot = extract_cot(extra_nav)
+            overlay_summary = f"Nav Command: {nav_cmd}"
+            print(
+                f"[{seg_name} | Frame {local_idx}] Cmd: \033[92m{nav_cmd}\033[0m | "
+                f"Reasoning: \033[38;2;255;165;0m{cot}\033[0m"
+            )
 
             # Plotting GT vs Pred
             ax_export.clear()
