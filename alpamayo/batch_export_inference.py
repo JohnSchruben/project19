@@ -2,10 +2,7 @@ import os
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 import sys
 import glob
-import json
 import argparse
-import copy
-import re
 import numpy as np
 import cv2
 import torch
@@ -21,10 +18,10 @@ from alpamayo1_5.models.alpamayo1_5 import Alpamayo1_5
 
 
 TURN_COLOR_MAP = {
-    "Left": "tab:orange",
-    "Straight": "tab:blue",
-    "Right": "tab:green",
-    "Command": "tab:blue",
+    "Ground Truth": "red",
+    "Nav Command": "green",
+    "Opposite Command": "deeppink",
+    "Command": "green",
 }
 
 
@@ -55,35 +52,19 @@ def extract_cot(extra):
 
 def nav_label(nav_cmd: str) -> str:
     nav_lower = nav_cmd.lower()
-    if "left" in nav_lower:
-        return "Left"
-    if "right" in nav_lower:
-        return "Right"
-    if "straight" in nav_lower:
-        return "Straight"
+    if "left" in nav_lower or "right" in nav_lower or "straight" in nav_lower:
+        return "Nav Command"
     return "Command"
 
 
-def build_turn_option_commands(nav_cmd: str) -> list[tuple[str, str]]:
+def build_nav_and_opposite_commands(nav_cmd: str) -> list[tuple[str, str]]:
     nav_lower = nav_cmd.lower()
-    distance_match = re.search(r"\bin\s+(\d+)\s*m\b", nav_cmd, flags=re.IGNORECASE)
-    distance_suffix = f" in {distance_match.group(1)}m" if distance_match else ""
-
-    if "left" in nav_lower:
-        left_cmd = nav_cmd
-        right_cmd = nav_utils.swap_direction(nav_cmd)
-    elif "right" in nav_lower:
-        left_cmd = nav_utils.swap_direction(nav_cmd)
-        right_cmd = nav_cmd
-    else:
-        left_cmd = f"Turn left{distance_suffix}"
-        right_cmd = f"Turn right{distance_suffix}"
-
-    return [
-        ("Left", left_cmd),
-        ("Straight", "Go Straight"),
-        ("Right", right_cmd),
-    ]
+    if "left" in nav_lower or "right" in nav_lower:
+        return [
+            ("Nav Command", nav_cmd),
+            ("Opposite Command", nav_utils.swap_direction(nav_cmd)),
+        ]
+    return [("Nav Command", nav_cmd)]
 
 
 def run_nav_inference(
@@ -137,21 +118,17 @@ def run_nav_inference(
     return pred_xyz_nav, pred_rot_nav, extra_nav
 
 
-def plot_prediction_samples(ax, pred_tensor, num_frames: int, color: str, label: str):
+def mean_prediction_xy(pred_tensor, num_frames: int) -> tuple[np.ndarray, np.ndarray, int]:
     pred_np = pred_tensor.detach().cpu().numpy()[0, 0]
-    alpha = 0.18 if pred_np.shape[0] > 1 else 1.0
-
-    for sample in pred_np:
-        n_frames = min(num_frames, sample.shape[0])
-        p_x = np.concatenate(([0.0], sample[:n_frames, 0]))
-        p_y = np.concatenate(([0.0], sample[:n_frames, 1]))
-        ax.plot([-y for y in p_y], p_x, color=color, linewidth=1.0, alpha=alpha)
-
     mean_sample = pred_np.mean(axis=0)
     n_frames = min(num_frames, mean_sample.shape[0])
     mean_x = np.concatenate(([0.0], mean_sample[:n_frames, 0]))
     mean_y = np.concatenate(([0.0], mean_sample[:n_frames, 1]))
-    ax.plot([-y for y in mean_y], mean_x, color=color, linewidth=2.5, label=label)
+    return mean_x, mean_y, n_frames
+
+
+def plot_dotted_path(ax, xs: np.ndarray, ys: np.ndarray, color: str, label: str):
+    ax.plot([-y for y in ys], xs, marker='o', color=color, linewidth=2.0, label=label)
 
 
 def main():
@@ -322,14 +299,14 @@ def main():
 
             compare_turn_options = (
                 args.command is not None
-                and any(word in args.command.lower() for word in ("left", "right", "straight"))
+                and any(word in args.command.lower() for word in ("left", "right"))
             )
             nav_runs = []
             overlay_summary = ""
             cot = ""
 
             if compare_turn_options:
-                for label, cmd_text in build_turn_option_commands(args.command):
+                for label, cmd_text in build_nav_and_opposite_commands(args.command):
                     pred_xyz_nav, _, extra_nav = run_nav_inference(
                         model=model,
                         processor=processor,
@@ -346,7 +323,7 @@ def main():
                         f"\033[92m{cmd_text}\033[0m | Reasoning: "
                         f"\033[38;2;255;165;0m{cot_text}\033[0m"
                     )
-                overlay_summary = "Nav Compare: Left / Straight / Right"
+                overlay_summary = "Nav Compare: Command vs Opposite"
             else:
                 pred_xyz_nav, _, extra_nav = run_nav_inference(
                     model=model,
@@ -367,17 +344,23 @@ def main():
 
             # Plotting GT vs Pred
             ax_export.clear()
-
-            n_gt_frames = min(args.frames, gt_xyz.shape[0])
-            gt_x = np.concatenate(([0.0], gt_xyz[:n_gt_frames, 0]))
-            gt_y = np.concatenate(([0.0], gt_xyz[:n_gt_frames, 1]))
-            ax_export.plot([-y for y in gt_y], gt_x, marker='o', color='black', linewidth=2.5, label="GT")
-
+            pred_plot_data = []
+            max_common_frames = gt_xyz.shape[0]
             for label, _, pred_xyz in nav_runs:
-                plot_prediction_samples(
+                pred_x, pred_y, pred_frames = mean_prediction_xy(pred_xyz, args.frames)
+                pred_plot_data.append((label, pred_x, pred_y, pred_frames))
+                max_common_frames = min(max_common_frames, pred_frames)
+
+            n_plot_frames = min(args.frames, max_common_frames)
+            gt_x = np.concatenate(([0.0], gt_xyz[:n_plot_frames, 0]))
+            gt_y = np.concatenate(([0.0], gt_xyz[:n_plot_frames, 1]))
+            plot_dotted_path(ax_export, gt_x, gt_y, TURN_COLOR_MAP["Ground Truth"], "Ground Truth")
+
+            for label, pred_x, pred_y, _ in pred_plot_data:
+                plot_dotted_path(
                     ax_export,
-                    pred_xyz,
-                    args.frames,
+                    pred_x[: n_plot_frames + 1],
+                    pred_y[: n_plot_frames + 1],
                     TURN_COLOR_MAP.get(label, TURN_COLOR_MAP["Command"]),
                     label,
                 )
