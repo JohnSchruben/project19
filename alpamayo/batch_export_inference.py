@@ -19,9 +19,9 @@ from alpamayo1_5.models.alpamayo1_5 import Alpamayo1_5
 
 TURN_COLOR_MAP = {
     "Ground Truth": "red",
-    "Nav Command": "green",
+    "Nav Command": "lime",
     "Opposite Command": "deeppink",
-    "Command": "green",
+    "Command": "lime",
 }
 
 
@@ -298,15 +298,14 @@ def main():
             torch.cuda.manual_seed_all(42)
 
             compare_turn_options = (
-                args.command is not None
-                and any(word in args.command.lower() for word in ("left", "right"))
+                any(word in nav_cmd.lower() for word in ("left", "right"))
             )
             nav_runs = []
             overlay_summary = ""
             cot = ""
 
             if compare_turn_options:
-                for label, cmd_text in build_nav_and_opposite_commands(args.command):
+                for label, cmd_text in build_nav_and_opposite_commands(nav_cmd):
                     pred_xyz_nav, _, extra_nav = run_nav_inference(
                         model=model,
                         processor=processor,
