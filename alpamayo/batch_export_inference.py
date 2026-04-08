@@ -141,6 +141,10 @@ def main():
                         help="Optional navigation command to inject into Alpamayo prompt (e.g., 'Turn Right')")
     parser.add_argument("--segment", type=str, default=None,
                         help="Process only a specific segment (e.g., 'segment_00')")
+    parser.add_argument("--start-frame", type=int, default=0,
+                        help="First frame index to process within the segment (inclusive)")
+    parser.add_argument("--end-frame", type=int, default=None,
+                        help="Last frame index to process within the segment (inclusive)")
     parser.add_argument("--num-traj-samples", type=int, default=6,
                         help="Number of trajectory samples to draw per condition")
     parser.add_argument("--guidance-weight", type=float, default=1.5,
@@ -192,8 +196,41 @@ def main():
             continue
             
         num_frames_seg = len(glob.glob(os.path.join(telemetry_dir, "*.json")))
+        if num_frames_seg == 0:
+            print(f"Skipping {seg_name} because it has no telemetry frames.")
+            continue
+
+        start_frame = args.start_frame
+        end_frame = num_frames_seg - 1 if args.end_frame is None else args.end_frame
+
+        if start_frame < 0:
+            print(f"Skipping {seg_name}: start frame {start_frame} must be >= 0.")
+            continue
+        if end_frame < 0:
+            print(f"Skipping {seg_name}: end frame {end_frame} must be >= 0.")
+            continue
+        if start_frame >= num_frames_seg:
+            print(
+                f"Skipping {seg_name}: start frame {start_frame} is outside the segment "
+                f"(0-{num_frames_seg - 1})."
+            )
+            continue
+        if end_frame >= num_frames_seg:
+            print(
+                f"Skipping {seg_name}: end frame {end_frame} is outside the segment "
+                f"(0-{num_frames_seg - 1})."
+            )
+            continue
+        if end_frame < start_frame:
+            print(
+                f"Skipping {seg_name}: end frame {end_frame} is before start frame {start_frame}."
+            )
+            continue
         
-        output_video_path = f"{seg_name}_inference.mp4"
+        if start_frame == 0 and end_frame == num_frames_seg - 1:
+            output_video_path = f"{seg_name}_inference.mp4"
+        else:
+            output_video_path = f"{seg_name}_inference_{start_frame:06d}_{end_frame:06d}.mp4"
         out = None
         
         
@@ -201,11 +238,16 @@ def main():
         ax_export = fig_export.add_subplot(111)
         overlay_size = (300, 300)
 
+        print(
+            f"Processing frames {start_frame} through {end_frame} "
+            f"(inclusive) out of 0-{num_frames_seg - 1}."
+        )
+
         active_turn_cmd = "Go Straight"
         turn_dist_m = 0.0
         turn_active_frames = 0
 
-        for local_idx in range(num_frames_seg):
+        for local_idx in range(start_frame, end_frame + 1):
             if interrupt_flag[0]:
                 break
             
