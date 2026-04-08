@@ -19,8 +19,9 @@ def run_cmd(nav_cmd, padding="black"):
     data = load_custom_dataset(seg_dir, 0)
     
     if padding == "duplicate":
-        front_wide = data["image_frames"][1:2]
+        front_wide = data["image_frames"][:1]
         data["image_frames"] = torch.cat([front_wide]*4, dim=0)
+        data["camera_indices"] = torch.tensor([0, 1, 2, 6], dtype=torch.int64)
 
     messages = helper.create_message(
         data["image_frames"].flatten(0, 1),

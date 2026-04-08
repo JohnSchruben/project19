@@ -181,19 +181,10 @@ def load_custom_dataset(
     # Stack: (num_frames, H, W, 3) -> (num_frames, 3, H, W)
     images_tensor = torch.tensor(np.stack(images), dtype=torch.uint8).permute(0, 3, 1, 2)
     
-    # We only have one camera (Front Wide). Instead of padding missing cameras with black,
-    # we copy the front wide camera into all camera perspectives to preserve dense visual
-    # features avoiding out-of-distribution visual collapse that overrides navigation intents.
-    front_wide_tensor = images_tensor.unsqueeze(0) # (1, num_frames, 3, H, W)
-    
-    image_frames = torch.cat([
-        front_wide_tensor,  # 0: Cross Left (Index 0)
-        front_wide_tensor,  # 1: Front Wide (Index 1)
-        front_wide_tensor,  # 2: Cross Right (Index 2)
-        front_wide_tensor,  # 3: Front Tele (Index 6, copied from front wide)
-    ], dim=0) # (4, num_frames, 3, H, W)
-    
-    camera_indices = torch.tensor([0, 1, 2, 6], dtype=torch.int64)
+    # Alpamayo 1.5 supports variable camera counts, so keep the custom loader honest:
+    # return only the actual front-wide camera instead of fabricating left/right/tele views.
+    image_frames = images_tensor.unsqueeze(0)  # (1, num_frames, 3, H, W)
+    camera_indices = torch.tensor([1], dtype=torch.int64)
     
     return {
         "image_frames": image_frames,

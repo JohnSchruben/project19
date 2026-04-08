@@ -5,6 +5,7 @@ import glob
 import json
 import argparse
 import copy
+import re
 import numpy as np
 import cv2
 import torch
@@ -18,6 +19,15 @@ from alpamayo1_5.load_custom_dataset import load_custom_dataset
 from alpamayo1_5 import helper, nav_utils
 from alpamayo1_5.models.alpamayo1_5 import Alpamayo1_5
 
+
+TURN_COLOR_MAP = {
+    "Left": "tab:orange",
+    "Straight": "tab:blue",
+    "Right": "tab:green",
+    "Command": "tab:blue",
+}
+
+
 def get_default_route():
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'datasets'))
     dirs = [d for d in glob.glob(os.path.join(base_dir, '*')) if os.path.isdir(d)]
@@ -27,6 +37,122 @@ def get_default_route():
     return None
 
 import signal
+
+
+def extract_cot(extra):
+    cot = extra["cot"][0][0]
+    if isinstance(cot, np.ndarray):
+        if cot.size == 1:
+            cot = cot.item()
+        elif cot.size == 0:
+            cot = ""
+        else:
+            cot = " ".join(map(str, cot.flatten()))
+    if isinstance(cot, list):
+        cot = " ".join(map(str, cot)) if cot else ""
+    return str(cot).strip()
+
+
+def nav_label(nav_cmd: str) -> str:
+    nav_lower = nav_cmd.lower()
+    if "left" in nav_lower:
+        return "Left"
+    if "right" in nav_lower:
+        return "Right"
+    if "straight" in nav_lower:
+        return "Straight"
+    return "Command"
+
+
+def build_turn_option_commands(nav_cmd: str) -> list[tuple[str, str]]:
+    nav_lower = nav_cmd.lower()
+    distance_match = re.search(r"\bin\s+(\d+)\s*m\b", nav_cmd, flags=re.IGNORECASE)
+    distance_suffix = f" in {distance_match.group(1)}m" if distance_match else ""
+
+    if "left" in nav_lower:
+        left_cmd = nav_cmd
+        right_cmd = nav_utils.swap_direction(nav_cmd)
+    elif "right" in nav_lower:
+        left_cmd = nav_utils.swap_direction(nav_cmd)
+        right_cmd = nav_cmd
+    else:
+        left_cmd = f"Turn left{distance_suffix}"
+        right_cmd = f"Turn right{distance_suffix}"
+
+    return [
+        ("Left", left_cmd),
+        ("Straight", "Go Straight"),
+        ("Right", right_cmd),
+    ]
+
+
+def run_nav_inference(
+    model,
+    processor,
+    data,
+    device,
+    nav_cmd: str,
+    num_traj_samples: int,
+    guidance_weight: float,
+):
+    messages_nav = helper.create_message(
+        data["image_frames"].flatten(0, 1),
+        camera_indices=data.get("camera_indices"),
+        nav_text=nav_cmd,
+    )
+    inputs_nav = processor.apply_chat_template(
+        messages_nav,
+        tokenize=True,
+        add_generation_prompt=False,
+        continue_final_message=True,
+        return_dict=True,
+        return_tensors="pt",
+    )
+    model_inputs_nav = helper.to_device(
+        {
+            "tokenized_data": inputs_nav,
+            "ego_history_xyz": data["ego_history_xyz"],
+            "ego_history_rot": data["ego_history_rot"],
+        },
+        device,
+    )
+
+    with torch.autocast(device_type=device, dtype=torch.bfloat16):
+        pred_xyz_nav, pred_rot_nav, extra_nav = (
+            model.sample_trajectories_from_data_with_vlm_rollout_cfg_nav(
+                data=model_inputs_nav,
+                top_p=0.98,
+                temperature=0.6,
+                num_traj_samples=num_traj_samples,
+                max_generation_length=256,
+                return_extra=True,
+                diffusion_kwargs={
+                    "use_classifier_free_guidance": True,
+                    "inference_guidance_weight": guidance_weight,
+                    "temperature": 0.6,
+                },
+            )
+        )
+
+    return pred_xyz_nav, pred_rot_nav, extra_nav
+
+
+def plot_prediction_samples(ax, pred_tensor, num_frames: int, color: str, label: str):
+    pred_np = pred_tensor.detach().cpu().numpy()[0, 0]
+    alpha = 0.18 if pred_np.shape[0] > 1 else 1.0
+
+    for sample in pred_np:
+        n_frames = min(num_frames, sample.shape[0])
+        p_x = np.concatenate(([0.0], sample[:n_frames, 0]))
+        p_y = np.concatenate(([0.0], sample[:n_frames, 1]))
+        ax.plot([-y for y in p_y], p_x, color=color, linewidth=1.0, alpha=alpha)
+
+    mean_sample = pred_np.mean(axis=0)
+    n_frames = min(num_frames, mean_sample.shape[0])
+    mean_x = np.concatenate(([0.0], mean_sample[:n_frames, 0]))
+    mean_y = np.concatenate(([0.0], mean_sample[:n_frames, 1]))
+    ax.plot([-y for y in mean_y], mean_x, color=color, linewidth=2.5, label=label)
+
 
 def main():
     parser = argparse.ArgumentParser(description="Headless batch video exporter with Alpamayo inference.")
@@ -38,6 +164,10 @@ def main():
                         help="Optional navigation command to inject into Alpamayo prompt (e.g., 'Turn Right')")
     parser.add_argument("--segment", type=str, default=None,
                         help="Process only a specific segment (e.g., 'segment_00')")
+    parser.add_argument("--num-traj-samples", type=int, default=6,
+                        help="Number of trajectory samples to draw per condition")
+    parser.add_argument("--guidance-weight", type=float, default=1.5,
+                        help="Classifier-free guidance weight for nav-conditioned inference")
     args = parser.parse_args()
     
     # Safe interrupt flag to gracefully finish the current frame and save the video seamlessly
@@ -58,9 +188,9 @@ def main():
         "nvidia/Alpamayo-1.5-10B", 
         dtype=torch.bfloat16,
         attn_implementation="eager").to(device)
-        
-    print("Compiling model for faster inference (this may take a few minutes on the first run)...")
-    model = torch.compile(model)
+    if device == "cuda":
+        print("Compiling model for faster inference (this may take a few minutes on the first run)...")
+        model = torch.compile(model)
     
     processor = helper.get_processor(model.tokenizer)
 
@@ -95,7 +225,6 @@ def main():
         overlay_size = (300, 300)
 
         active_turn_cmd = "Go Straight"
-        turn_cmd_frames_left = 0
         turn_dist_m = 0.0
         turn_active_frames = 0
 
@@ -190,89 +319,71 @@ def main():
 
             # Set fixed seed to match the nav notebook exactly for deterministic conditional inference
             torch.cuda.manual_seed_all(42)
-            
-            # Inference
-            messages_nav = helper.create_message(
-                data["image_frames"].flatten(0, 1),
-                camera_indices=data.get("camera_indices"),
-                nav_text=nav_cmd,
-            )
-            inputs_nav = processor.apply_chat_template(
-                messages_nav,
-                tokenize=True,
-                add_generation_prompt=False,
-                continue_final_message=True,
-                return_dict=True,
-                return_tensors="pt",
-            )
-            model_inputs_nav = helper.to_device(
-                {
-                    "tokenized_data": inputs_nav,
-                    "ego_history_xyz": data["ego_history_xyz"],
-                    "ego_history_rot": data["ego_history_rot"],
-                },
-                device,
-            )
-            
 
+            compare_turn_options = (
+                args.command is not None
+                and any(word in args.command.lower() for word in ("left", "right", "straight"))
+            )
+            nav_runs = []
+            overlay_summary = ""
+            cot = ""
 
-            with torch.autocast(device_type=device, dtype=torch.bfloat16):
-                pred_xyz_nav, pred_rot_nav, extra_nav = model.sample_trajectories_from_data_with_vlm_rollout_cfg_nav(
-                    data=model_inputs_nav,
-                    top_p=0.98,
-                    temperature=0.6,
-                    num_traj_samples=6,
-                    max_generation_length=256,
-                    return_extra=True,
-                    diffusion_kwargs={
-                        "use_classifier_free_guidance": True,
-                        "inference_guidance_weight": 3.5,
-                        "temperature": 0.6,
-                    }
+            if compare_turn_options:
+                for label, cmd_text in build_turn_option_commands(args.command):
+                    pred_xyz_nav, _, extra_nav = run_nav_inference(
+                        model=model,
+                        processor=processor,
+                        data=data,
+                        device=device,
+                        nav_cmd=cmd_text,
+                        num_traj_samples=args.num_traj_samples,
+                        guidance_weight=args.guidance_weight,
+                    )
+                    nav_runs.append((label, cmd_text, pred_xyz_nav))
+                    cot_text = extract_cot(extra_nav)
+                    print(
+                        f"[{seg_name} | Frame {local_idx}] {label}: "
+                        f"\033[92m{cmd_text}\033[0m | Reasoning: "
+                        f"\033[38;2;255;165;0m{cot_text}\033[0m"
+                    )
+                overlay_summary = "Nav Compare: Left / Straight / Right"
+            else:
+                pred_xyz_nav, _, extra_nav = run_nav_inference(
+                    model=model,
+                    processor=processor,
+                    data=data,
+                    device=device,
+                    nav_cmd=nav_cmd,
+                    num_traj_samples=args.num_traj_samples,
+                    guidance_weight=args.guidance_weight,
                 )
-
-                
-            cot = extra_nav["cot"][0][0] # first sample, first batch
-            if isinstance(cot, np.ndarray):
-                if cot.size == 1:
-                    cot = cot.item()
-                elif cot.size == 0:
-                    cot = ""
-                else:
-                    cot = " ".join(map(str, cot.flatten()))
-            if isinstance(cot, list):
-                if len(cot) > 0: cot = " ".join(map(str, cot))
-                else: cot = ""
-            cot = str(cot).strip()
-            
-            # Use ANSI escape codes for coloring (Green for Command, TrueColor Orange for Reasoning)
-            print(f"[{seg_name} | Frame {local_idx}] Cmd: \033[92m{nav_cmd}\033[0m | Reasoning: \033[38;2;255;165;0m{cot}\033[0m")
+                nav_runs.append((nav_label(nav_cmd), nav_cmd, pred_xyz_nav))
+                cot = extract_cot(extra_nav)
+                overlay_summary = f"Nav Command: {nav_cmd}"
+                print(
+                    f"[{seg_name} | Frame {local_idx}] Cmd: \033[92m{nav_cmd}\033[0m | "
+                    f"Reasoning: \033[38;2;255;165;0m{cot}\033[0m"
+                )
 
             # Plotting GT vs Pred
             ax_export.clear()
-            
-            def extract_prds(pred_tensor):
-                # Average across the num_traj_samples dimension (dim 2)
-                prd_xyz = pred_tensor.mean(dim=2).cpu().numpy()[0, 0] # shape (seq_len, 3)
-                n_frames = min(args.frames, prd_xyz.shape[0])
-                p_x = np.concatenate(([0.0], prd_xyz[:n_frames, 0]))
-                p_y = np.concatenate(([0.0], prd_xyz[:n_frames, 1]))
-                return p_x, p_y
-                
+
             n_gt_frames = min(args.frames, gt_xyz.shape[0])
             gt_x = np.concatenate(([0.0], gt_xyz[:n_gt_frames, 0]))
             gt_y = np.concatenate(([0.0], gt_xyz[:n_gt_frames, 1]))
-            
-            ax_export.plot([-y for y in gt_y], gt_x, marker='o', color='red', linewidth=2, label="GT")
-            
-            # with nav (Blue)
-            p_xw, p_yw = extract_prds(pred_xyz_nav)
-            ax_export.plot([-y for y in p_yw], p_xw, marker='x', color='blue', linewidth=2, label="Nav")
-            
+            ax_export.plot([-y for y in gt_y], gt_x, marker='o', color='black', linewidth=2.5, label="GT")
 
-            
+            for label, _, pred_xyz in nav_runs:
+                plot_prediction_samples(
+                    ax_export,
+                    pred_xyz,
+                    args.frames,
+                    TURN_COLOR_MAP.get(label, TURN_COLOR_MAP["Command"]),
+                    label,
+                )
+
             ax_export.plot(0, 0, marker='*', color='black', markersize=15)
-            
+            ax_export.legend(loc="best", fontsize=8)
             ax_export.set_aspect('equal')
             cur_xlim = ax_export.get_xlim()
             cur_ylim = ax_export.get_ylim()
@@ -297,8 +408,10 @@ def main():
             fg = cv2.bitwise_and(overlay_img, overlay_img, mask=mask)
             img_np[h-overlay_size[1]:h, w-overlay_size[0]:w] = cv2.add(bg, fg)
 
-            # Draw wrapped CoT reasoning text onto image
-            wrapped_text = textwrap.wrap(cot, width=70) # Wrap text cleanly
+            # Draw wrapped text onto image. In compare mode, keep the overlay concise and
+            # rely on the colored trajectory groups plus console logs for the per-command CoT.
+            overlay_text = cot
+            wrapped_text = textwrap.wrap(overlay_text, width=70) if overlay_text else []
             y_text = 40
             
             # Calculate total height for the background rectangle (CoT + Nav Command)
@@ -312,11 +425,8 @@ def main():
                 cv2.putText(img_np, line, (20, y_text), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                 y_text += 30
             
-            # Draw Nav Command line (orange in OpenCV BGR/RGB logic - since image is currently RGB via PIL, we use RGB values: (255, 165, 0))
-            # Wait, `cv2` deals with colors in BGR order usually when saving, but the frame is currently an RGB numpy array because of `Image.open().convert('RGB')`
-            # and finally `cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)` is called below.
-            # Thus, the color tuple here MUST be RGB! Orange in RGB is (255, 165, 0).
-            cv2.putText(img_np, f"Nav Command: {nav_cmd}", (20, y_text + 15), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 165, 0), 2)
+            # The frame is RGB until the final conversion to BGR, so use RGB tuples here.
+            cv2.putText(img_np, overlay_summary, (20, y_text + 15), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 165, 0), 2)
                 
             # Convert once and write twice to effectively play 20Hz frames at 40 FPS seamlessly
             bgr_frame = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
