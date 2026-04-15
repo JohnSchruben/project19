@@ -72,3 +72,15 @@ What it tests:
 - End-to-end pipeline performance
 
 Results saved to `pipeline_results/pipeline_test_*.json`
+
+## Database 
+SQLite database for storing and querying annotated dashcam frames:
+```bash
+python import_annotations.py  # import frames into DB
+```
+```python
+from dataset_manager import DatasetManager
+db = DatasetManager()
+db.add_frame("frame.jpg", "frames/frame.jpg")
+```
+See `README_DATABASE.md` for full documentation.
