@@ -23,6 +23,7 @@ TURN_COLOR_MAP = {
     "Ground Truth": "red",
     "Nav Command": "lime",
     "Command": "lime",
+    "Sample": "gray",
 }
 
 
@@ -66,6 +67,7 @@ def run_nav_inference(
     nav_cmd: str,
     num_traj_samples: int,
     guidance_weight: float,
+    max_gen_length: int = 256,
 ):
     messages_nav = helper.create_message(
         data["image_frames"].flatten(0, 1),
@@ -96,7 +98,7 @@ def run_nav_inference(
                 top_p=0.98,
                 temperature=0.6,
                 num_traj_samples=num_traj_samples,
-                max_generation_length=256,
+                max_generation_length=max_gen_length,
                 return_extra=True,
                 diffusion_kwargs={
                     "use_classifier_free_guidance": True,
@@ -161,6 +163,10 @@ def main():
                         help="Number of trajectory samples to draw per condition")
     parser.add_argument("--guidance-weight", type=float, default=1.5,
                         help="Classifier-free guidance weight for nav-conditioned inference")
+    parser.add_argument("--max-gen-length", type=int, default=256,
+                        help="Maximum generation length for the trajectory diffusion model. Lower speeds it up but reduces max distance.")
+    parser.add_argument("--plot-all-samples", action="store_true",
+                        help="Plot all trajectory samples instead of just the selected best path")
     args = parser.parse_args()
     
     # Safe interrupt flag to gracefully finish the current frame and save the video seamlessly
@@ -373,6 +379,7 @@ def main():
                 nav_cmd=nav_cmd,
                 num_traj_samples=args.num_traj_samples,
                 guidance_weight=args.guidance_weight,
+                max_gen_length=args.max_gen_length,
             )
             nav_runs.append((nav_label(nav_cmd), nav_cmd, pred_xyz_nav))
             cot = extract_cot(extra_nav)
@@ -388,6 +395,16 @@ def main():
             max_common_frames = gt_xyz.shape[0]
             for label, cmd_text, pred_xyz in nav_runs:
                 pred_x, pred_y, pred_frames = select_prediction_xy(pred_xyz, cmd_text, args.frames)
+                
+                if args.plot_all_samples:
+                    pred_np = pred_xyz.detach().cpu().numpy()[0, 0]
+                    for i in range(pred_np.shape[0]):
+                        selected = pred_np[i]
+                        n_f = min(args.frames, selected.shape[0])
+                        px = np.concatenate(([0.0], selected[:n_f, 0]))
+                        py = np.concatenate(([0.0], selected[:n_f, 1]))
+                        pred_plot_data.append(("Sample", px, py, n_f))
+
                 pred_plot_data.append((label, pred_x, pred_y, pred_frames))
                 max_common_frames = min(max_common_frames, pred_frames)
 
@@ -397,16 +414,25 @@ def main():
             plot_dotted_path(ax_export, gt_x, gt_y, TURN_COLOR_MAP["Ground Truth"], "Ground Truth")
 
             for label, pred_x, pred_y, _ in pred_plot_data:
-                plot_dotted_path(
-                    ax_export,
+                # If plotting background samples, make them thinner and distinct
+                is_sample = label == "Sample"
+                alpha = 0.4 if is_sample else 1.0
+                lw = 1.0 if is_sample else 2.0
+                ax_export.plot(
+                    [-y for y in pred_y[: n_plot_frames + 1]],
                     pred_x[: n_plot_frames + 1],
-                    pred_y[: n_plot_frames + 1],
-                    TURN_COLOR_MAP.get(label, TURN_COLOR_MAP["Command"]),
-                    label,
+                    marker='o',
+                    color=TURN_COLOR_MAP.get(label, TURN_COLOR_MAP["Command"]),
+                    linewidth=lw,
+                    alpha=alpha,
+                    label=label if not is_sample else ""
                 )
 
             ax_export.plot(0, 0, marker='*', color='black', markersize=15)
-            ax_export.legend(loc="best", fontsize=8)
+            # Remove duplicate labels
+            handles, labels = ax_export.get_legend_handles_labels()
+            by_label = dict(zip(labels, handles))
+            ax_export.legend(by_label.values(), by_label.keys(), loc="best", fontsize=8)
             ax_export.set_aspect('equal')
             cur_xlim = ax_export.get_xlim()
             cur_ylim = ax_export.get_ylim()
