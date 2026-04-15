@@ -155,37 +155,70 @@ def load_custom_dataset(
     ego_history_rot = torch.tensor(np.stack(hist_rot), dtype=torch.float32).unsqueeze(0).unsqueeze(0)
     ego_future_xyz = torch.tensor(np.stack(fut_xyz), dtype=torch.float32).unsqueeze(0).unsqueeze(0)
     ego_future_rot = torch.tensor(np.stack(fut_rot), dtype=torch.float32).unsqueeze(0).unsqueeze(0)
-    
+
     # 3. Load Images
     # Alpamayo expects (N_cameras, num_frames, 3, H, W)
-    
-    num_visual_frames = 4 # Default in load_physical_aiavdataset
-    images = []
-    
-    # Indices for visual frames
-    for i in range(num_visual_frames):
-        # Index: frame_idx - (3 - i) * stride
-        idx = frame_idx - (num_visual_frames - 1 - i) * frame_stride
-        if idx < 0: idx = 0
-        img_path = os.path.join(raw_dir, f"{idx:06d}.png")
-        if os.path.exists(img_path):
-            img = Image.open(img_path).convert('RGB')
-            # You can optionally resize here if needed, eg. img.resize((W, H))
-            img_np = np.array(img)
-        else:
-            # If image missing, pad with zeros or a previous image
-            img_np = np.zeros((224, 224, 3), dtype=np.uint8) # Placeholder
-            
-        images.append(img_np)
-        
-    # Stack: (num_frames, H, W, 3) -> (num_frames, 3, H, W)
-    images_tensor = torch.tensor(np.stack(images), dtype=torch.uint8).permute(0, 3, 1, 2)
-    
-    # Alpamayo 1.5 supports variable camera counts, so keep the custom loader honest:
-    # return only the actual front-wide camera instead of fabricating left/right/tele views.
-    image_frames = images_tensor.unsqueeze(0)  # (1, num_frames, 3, H, W)
-    camera_indices = torch.tensor([1], dtype=torch.int64)
-    
+    #
+    # Camera directory mapping – indices match Alpamayo's convention:
+    #   0 = camera_cross_left_120fov   → raw_left/
+    #   1 = camera_front_wide_120fov   → raw/
+    #   2 = camera_cross_right_120fov  → raw_right/
+    camera_dirs = [
+        ("raw_left",  0),  # Left camera
+        ("raw",       1),  # Front-wide camera
+        ("raw_right", 2),  # Right camera
+    ]
+
+    # Auto-detect which camera directories are present
+    available_cameras = []
+    for dir_name, cam_idx in camera_dirs:
+        cam_dir = os.path.join(segment_dir, dir_name)
+        if os.path.isdir(cam_dir) and any(
+            f.endswith(".png") for f in os.listdir(cam_dir)
+        ):
+            available_cameras.append((cam_dir, cam_idx))
+
+    if not available_cameras:
+        raise FileNotFoundError(
+            f"No camera directories with images found in {segment_dir}. "
+            "Expected at least 'raw/' containing .png frames."
+        )
+
+    num_visual_frames = 4  # Default in load_physical_aiavdataset
+
+    all_camera_frames = []
+    all_camera_indices = []
+
+    for cam_dir, cam_idx in available_cameras:
+        images = []
+        for i in range(num_visual_frames):
+            idx = frame_idx - (num_visual_frames - 1 - i) * frame_stride
+            if idx < 0:
+                idx = 0
+            img_path = os.path.join(cam_dir, f"{idx:06d}.png")
+            if os.path.exists(img_path):
+                img = Image.open(img_path).convert('RGB')
+                img_np = np.array(img)
+            else:
+                img_np = np.zeros((224, 224, 3), dtype=np.uint8)
+            images.append(img_np)
+
+        # (num_frames, H, W, 3) -> (num_frames, 3, H, W)
+        cam_tensor = torch.tensor(
+            np.stack(images), dtype=torch.uint8
+        ).permute(0, 3, 1, 2)
+        all_camera_frames.append(cam_tensor)
+        all_camera_indices.append(cam_idx)
+
+    # Stack: (N_cameras, num_frames, 3, H, W)
+    image_frames = torch.stack(all_camera_frames, dim=0)
+    camera_indices = torch.tensor(all_camera_indices, dtype=torch.int64)
+
+    # Sort by camera index for consistent ordering (matches official loader)
+    sort_order = torch.argsort(camera_indices)
+    image_frames = image_frames[sort_order]
+    camera_indices = camera_indices[sort_order]
+
     return {
         "image_frames": image_frames,
         "camera_indices": camera_indices,
