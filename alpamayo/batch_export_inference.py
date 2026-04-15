@@ -245,10 +245,11 @@ def main():
             )
             continue
         
+        route_name = os.path.basename(os.path.abspath(args.route))
         if start_frame == 0 and end_frame == num_frames_seg - 1:
-            output_video_path = f"{seg_name}_inference.mp4"
+            output_video_path = f"{seg_name}_{route_name}_inference.mp4"
         else:
-            output_video_path = f"{seg_name}_inference_{start_frame:06d}_{end_frame:06d}.mp4"
+            output_video_path = f"{seg_name}_{route_name}_inference_{start_frame:06d}_{end_frame:06d}.mp4"
         out = None
         
         fig_export = plt.figure(figsize=(4, 4), dpi=100)
