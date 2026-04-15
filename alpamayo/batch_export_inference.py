@@ -421,7 +421,17 @@ def main():
             # Draw wrapped text onto image. In compare mode, keep the overlay concise and
             # rely on the colored trajectory groups plus console logs for the per-command CoT.
             overlay_text = cot
-            wrapped_text = textwrap.wrap(overlay_text, width=70) if overlay_text else []
+            # Dynamically compute wrap width based on image width and font metrics
+            font_face = cv2.FONT_HERSHEY_SIMPLEX
+            font_scale = 0.7
+            font_thickness = 2
+            text_margin = 20  # px padding on each side
+            usable_width = w - (text_margin * 2)
+            # Measure average character width with a reference string
+            (ref_w, _), _ = cv2.getTextSize("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", font_face, font_scale, font_thickness)
+            char_width = ref_w / 52.0
+            wrap_chars = max(20, int(usable_width / char_width))
+            wrapped_text = textwrap.wrap(overlay_text, width=wrap_chars) if overlay_text else []
             y_text = 40
             
             # Calculate total height for the background rectangle (CoT + Nav Command)
@@ -432,7 +442,7 @@ def main():
             
             # Draw CoT lines (green)
             for line in wrapped_text:
-                cv2.putText(img_np, line, (20, y_text), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                cv2.putText(img_np, line, (text_margin, y_text), font_face, font_scale, (0, 255, 0), font_thickness)
                 y_text += 30
             
             # The frame is RGB until the final conversion to BGR, so use RGB tuples here.
