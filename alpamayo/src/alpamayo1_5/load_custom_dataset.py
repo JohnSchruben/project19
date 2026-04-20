@@ -167,7 +167,7 @@ def load_custom_dataset(
         ("raw_left",  0),  # Left camera
         ("raw",       1),  # Front-wide camera
         ("raw_right", 2),  # Right camera
-        ("raw_front", 3),  # Front-narrow camera
+        ("raw_front", 6),  # Front-tele (narrow) camera
     ]
 
     # Auto-detect which camera directories are present
