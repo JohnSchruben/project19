@@ -15,7 +15,7 @@ def load_custom_dataset(
     num_history_steps: int = 16, # Kinematic history length at 10Hz
     num_future_steps: int = 64,  # GT future length at 10Hz
     time_step: float = 0.1,      # Target framerate matching Alpamayo (10Hz)
-    frame_stride: int = 2,       # Source dataset stride (Openpilot is 20Hz, so stride 2 = 10Hz)
+    frame_stride: int = 1,       # Artificially halved (1) instead of 2. Tricks the model into seeing Optical Flow moving at 50% speed to counteract FOV differences!
 ):
     """
     Loads custom openpilot-style data and converts to Alpamayo format.
