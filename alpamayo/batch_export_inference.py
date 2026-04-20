@@ -63,24 +63,23 @@ import signal
 
 def extract_cot(extra, idx=0):
     try:
-        cot_list = extra["cot"][0]
-        if isinstance(cot_list, (np.ndarray, list)) and len(cot_list) > idx:
-            cot = cot_list[idx]
-        else:
-            cot = cot_list[0]
+        # Alpamayo wraps extra["cot"] in nested dimensions [batch=1, beam=1, samples=16]
+        cot_data = extra.get("cot", [])
+        
+        # Unwrap extraneous [1] outer dimensions until we hit the actual array of 16 options
+        while isinstance(cot_data, (list, tuple, np.ndarray)) and len(cot_data) == 1:
+            cot_data = cot_data[0]
+            
+        # Select the exact string that matches the statistically chosen trajectory index
+        if isinstance(cot_data, (list, tuple, np.ndarray)):
+            if len(cot_data) > idx:
+                return str(cot_data[idx]).strip()
+            elif len(cot_data) > 0:
+                return str(cot_data[0]).strip()
+        
+        return str(cot_data).strip()
     except Exception:
         return ""
-
-    if isinstance(cot, np.ndarray):
-        if cot.size == 1:
-            cot = cot.item()
-        elif cot.size == 0:
-            cot = ""
-        else:
-            cot = " ".join(map(str, cot.flatten()))
-    if isinstance(cot, list):
-        cot = " ".join(map(str, cot)) if cot else ""
-    return str(cot).strip()
 
 
 def nav_label(nav_cmd: str) -> str:
