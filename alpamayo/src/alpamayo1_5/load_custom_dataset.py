@@ -7,7 +7,7 @@ import os
 import json
 import torch
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageOps
 
 def load_custom_dataset(
     segment_dir: str,
@@ -199,10 +199,12 @@ def load_custom_dataset(
             img_path = os.path.join(cam_dir, f"{idx:06d}.png")
             if os.path.exists(img_path):
                 img = Image.open(img_path).convert('RGB')
-                img = img.resize((224, 224), Image.Resampling.BILINEAR)
+                # Use aspect-ratio preserving padding instead of crude stretching
+                # Standardizing to 640x480 (W, H) prevents horizontal stretching that destroys spatial intersection curves
+                img = ImageOps.pad(img, (640, 480), method=Image.Resampling.BILINEAR)
                 img_np = np.array(img)
             else:
-                img_np = np.zeros((224, 224, 3), dtype=np.uint8)
+                img_np = np.zeros((480, 640, 3), dtype=np.uint8)
             images.append(img_np)
 
         # (num_frames, H, W, 3) -> (num_frames, 3, H, W)
