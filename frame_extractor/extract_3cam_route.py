@@ -111,6 +111,10 @@ def main():
         "--dry-run", action="store_true",
         help="Preview what would be done without writing files"
     )
+    parser.add_argument(
+        "--sync-offset", type=int, default=23,
+        help="Number of initial black frames to pad to perfectly sync timelines"
+    )
     args = parser.parse_args()
 
     route_dir = os.path.join(DATASETS_DIR, args.route)
@@ -154,36 +158,38 @@ def main():
     print(f"Frames needed:  {total_frames_needed} "
           f"({args.segments} segments × {args.frames_per_segment} frames)")
 
-    if min_frames < total_frames_needed:
+    vid_frames_needed = total_frames_needed - args.sync_offset
+    if vid_frames_needed <= 0:
+        print("\nERROR: sync-offset is larger than total frames needed!")
+        sys.exit(1)
+
+    if min_frames < vid_frames_needed:
         print(f"\nWARNING: Not enough frames ({min_frames}) for "
-              f"{total_frames_needed} requested. Will use all available frames "
-              f"and distribute evenly.")
-        total_frames_needed = min(total_frames_needed, min_frames)
-        args.frames_per_segment = total_frames_needed // args.segments
-        total_frames_needed = args.segments * args.frames_per_segment
-        print(f"Adjusted: {args.frames_per_segment} frames per segment")
+              f"{vid_frames_needed} physical frames requested. Will use all available.")
 
     # Compute evenly spaced frame indices across the video
     frame_indices = np.linspace(
-        0, min_frames - 1, total_frames_needed, dtype=int
+        0, min_frames - 1, vid_frames_needed, dtype=int
     ).tolist()
 
-    step = min_frames / total_frames_needed
+    step = min_frames / vid_frames_needed
     effective_fps = (video_totals[list(video_totals.keys())[0]] /
                      (min_frames / 20.0)) / step  # assuming 20fps source
     print(f"Sampling every ~{step:.2f} frames (effective ~{20/step:.1f} Hz "
-          f"from 20 FPS source)")
+          f"from 20 FPS source, with a front-pad of {args.sync_offset} frames)")
 
     if args.dry_run:
         print("\n[DRY RUN] Would create:")
         for seg_idx in range(args.segments):
             seg_start = seg_idx * args.frames_per_segment
             seg_end = seg_start + args.frames_per_segment - 1
-            src_start = frame_indices[seg_start]
-            src_end = frame_indices[seg_end]
+            src_start_idx = max(0, seg_start - args.sync_offset)
+            src_end_idx = min(len(frame_indices) - 1, seg_end - args.sync_offset)
+            src_start = frame_indices[src_start_idx] if seg_start >= args.sync_offset else "BLACK"
+            src_end = frame_indices[src_end_idx] if seg_end >= args.sync_offset else "BLACK"
             print(f"  segment_{seg_idx:02d}/  "
                   f"frames {seg_start}-{seg_end} "
-                  f"(source frames {src_start}-{src_end})")
+                  f"(source video mapped frames: {src_start}-{src_end})")
             for _, dir_name in CAMERAS:
                 print(f"    {dir_name}/000000.png ... "
                       f"{args.frames_per_segment - 1:06d}.png")
@@ -210,11 +216,18 @@ def main():
             for local_idx, global_idx in enumerate(
                 range(seg_start, seg_end)
             ):
-                frame = all_frames[global_idx]
+                if global_idx < args.sync_offset:
+                    frame = None # Safely fallback to black padding
+                else:
+                    vid_idx = global_idx - args.sync_offset
+                    if vid_idx < len(all_frames):
+                        frame = all_frames[vid_idx]
+                    else:
+                        frame = None
+                        print(f"  WARNING: missing frame at array lookup, writing black")
+
                 if frame is None:
-                    print(f"  WARNING: missing frame at index "
-                          f"{frame_indices[global_idx]}, writing black")
-                    # Get dimensions from any available frame
+                    # Get dimensions from any available frame or safely default
                     frame = np.zeros((480, 640, 3), dtype=np.uint8)
 
                 out_path = os.path.join(seg_dir, f"{local_idx:06d}.png")

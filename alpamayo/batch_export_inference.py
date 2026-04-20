@@ -61,8 +61,16 @@ TURN_COLOR_MAP = {
 import signal
 
 
-def extract_cot(extra):
-    cot = extra["cot"][0][0]
+def extract_cot(extra, idx=0):
+    try:
+        cot_list = extra["cot"][0]
+        if isinstance(cot_list, (np.ndarray, list)) and len(cot_list) > idx:
+            cot = cot_list[idx]
+        else:
+            cot = cot_list[0]
+    except Exception:
+        return ""
+
     if isinstance(cot, np.ndarray):
         if cot.size == 1:
             cot = cot.item()
@@ -138,10 +146,10 @@ def select_prediction_xy(
     pred_tensor,
     nav_cmd: str,
     num_frames: int,
-) -> tuple[np.ndarray, np.ndarray, int]:
+) -> tuple[np.ndarray, np.ndarray, int, int]:
     pred_np = pred_tensor.detach().cpu().numpy()[0, 0]
     if pred_np.shape[0] == 0:
-        return np.array([0.0]), np.array([0.0]), 0
+        return np.array([0.0]), np.array([0.0]), 0, 0
 
     nav_lower = nav_cmd.lower()
     final_lateral = pred_np[:, -1, 1]
@@ -161,7 +169,7 @@ def select_prediction_xy(
     n_frames = min(num_frames, selected.shape[0])
     pred_x = np.concatenate(([0.0], selected[:n_frames, 0]))
     pred_y = np.concatenate(([0.0], selected[:n_frames, 1]))
-    return pred_x, pred_y, n_frames
+    return pred_x, pred_y, n_frames, sample_idx
 
 
 def plot_dotted_path(ax, xs: np.ndarray, ys: np.ndarray, color: str, label: str):
@@ -421,20 +429,21 @@ def main():
                 guidance_weight=args.guidance_weight,
                 max_gen_length=args.max_gen_length,
             )
-            nav_runs.append((nav_label(nav_cmd), nav_cmd, pred_xyz_nav))
-            cot = extract_cot(extra_nav)
+            nav_runs.append((nav_label(nav_cmd), nav_cmd, pred_xyz_nav, extra_nav))
             overlay_summary = f"Nav Command: {nav_cmd}"
-            print(
-                f"[{seg_name} | Frame {local_idx}] Cmd: \033[92m{nav_cmd}\033[0m | "
-                f"Reasoning: \033[38;2;255;165;0m{cot}\033[0m"
-            )
 
             # Plotting GT vs Pred
             ax_export.clear()
             pred_plot_data = []
             max_common_frames = gt_xyz.shape[0]
-            for label, cmd_text, pred_xyz in nav_runs:
-                pred_x, pred_y, pred_frames = select_prediction_xy(pred_xyz, cmd_text, args.frames)
+            for label, cmd_text, pred_xyz, extra in nav_runs:
+                pred_x, pred_y, pred_frames, sample_idx = select_prediction_xy(pred_xyz, cmd_text, args.frames)
+                
+                cot = extract_cot(extra, sample_idx)
+                print(
+                    f"[{seg_name} | Frame {local_idx}] Cmd: \033[92m{cmd_text}\033[0m | "
+                    f"Reasoning: \033[38;2;255;165;0m{cot}\033[0m"
+                )
                 
                 if args.plot_all_samples:
                     pred_np = pred_xyz.detach().cpu().numpy()[0, 0]
