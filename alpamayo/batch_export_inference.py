@@ -24,9 +24,9 @@ parser.add_argument("--start-frame", type=int, default=0,
                     help="First frame index to process within the segment (inclusive)")
 parser.add_argument("--end-frame", type=int, default=None,
                     help="Last frame index to process within the segment (inclusive)")
-parser.add_argument("--num-traj-samples", type=int, default=6,
+parser.add_argument("--num-traj-samples", type=int, default=16,
                     help="Number of trajectory samples to draw per condition")
-parser.add_argument("--guidance-weight", type=float, default=1.5,
+parser.add_argument("--guidance-weight", type=float, default=4.0,
                     help="Classifier-free guidance weight for nav-conditioned inference")
 parser.add_argument("--max-gen-length", type=int, default=256,
                     help="Maximum generation length for the trajectory diffusion model. Lower speeds it up but reduces max distance.")
