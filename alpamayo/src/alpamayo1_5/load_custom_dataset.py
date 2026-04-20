@@ -15,7 +15,8 @@ def load_custom_dataset(
     num_history_steps: int = 16, # Kinematic history length at 10Hz
     num_future_steps: int = 64,  # GT future length at 10Hz
     time_step: float = 0.1,      # Target framerate matching Alpamayo (10Hz)
-    frame_stride: int = 1,       # Artificially halved (1) instead of 2. Tricks the model into seeing Optical Flow moving at 50% speed to counteract FOV differences!
+    frame_stride: int = 2,       # Kinematic dataset stride (Openpilot is 20Hz, so stride 2 = exactly 10Hz physics)
+    visual_stride: int = 1,      # Artificially halved optical flow stride to fix GOPRO FOV distortion without breaking physics.
 ):
     """
     Loads custom openpilot-style data and converts to Alpamayo format.
@@ -193,7 +194,7 @@ def load_custom_dataset(
     for cam_dir, cam_idx in available_cameras:
         images = []
         for i in range(num_visual_frames):
-            idx = frame_idx - (num_visual_frames - 1 - i) * frame_stride
+            idx = frame_idx - (num_visual_frames - 1 - i) * visual_stride
             if idx < 0:
                 idx = 0
             img_path = os.path.join(cam_dir, f"{idx:06d}.png")
