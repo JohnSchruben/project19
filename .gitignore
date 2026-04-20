@@ -209,3 +209,6 @@ __pycache__/
 
 # Openpilot datasets
 datasets/
+
+# Videos
+videos/

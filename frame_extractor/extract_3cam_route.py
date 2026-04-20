@@ -38,7 +38,7 @@ DATASETS_DIR = os.path.join(PROJECT_DIR, "datasets")
 # Camera mapping: (video filename prefix, output directory name)
 CAMERAS = [
     ("cam0", "raw_left"),   # left camera  → Alpamayo index 0
-    ("cam1", "raw"),        # front camera → Alpamayo index 1
+    ("cam1", "raw_front"),  # front camera → Alpamayo index 1
     ("cam2", "raw_right"),  # right camera → Alpamayo index 2
 ]
 
@@ -113,8 +113,22 @@ def main():
     )
     args = parser.parse_args()
 
-    total_frames_needed = args.segments * args.frames_per_segment
     route_dir = os.path.join(DATASETS_DIR, args.route)
+
+    # Determine segments and frames per segment based on existing raw folder
+    seg_00_raw = os.path.join(route_dir, "segment_00", "raw")
+    if os.path.exists(seg_00_raw):
+        # Count frames in segment_00/raw
+        frames = [f for f in os.listdir(seg_00_raw) if f.endswith(('.png', '.jpg'))]
+        args.frames_per_segment = len(frames)
+        print(f"Detected {args.frames_per_segment} frames per segment based on {seg_00_raw}")
+        
+        # Count existing segments
+        segments = [d for d in os.listdir(route_dir) if d.startswith("segment_") and os.path.isdir(os.path.join(route_dir, d))]
+        args.segments = len(segments)
+        print(f"Detected {args.segments} segments based on {route_dir}")
+
+    total_frames_needed = args.segments * args.frames_per_segment
 
     # Discover and validate videos
     print("=" * 60)

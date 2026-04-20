@@ -208,7 +208,12 @@ def main():
         print(f"\nProcessing {seg_name}...")
         
         telemetry_dir = os.path.join(seg_dir, "telemetry")
-        raw_dir = os.path.join(seg_dir, "raw")
+        
+        # raw folder is front wide, raw_front is front narrow
+        raw_dir = os.path.join(seg_dir, "raw_front")
+        if not os.path.exists(raw_dir):
+            raw_dir = os.path.join(seg_dir, "raw")
+            
         if not os.path.exists(telemetry_dir) or not os.path.exists(raw_dir):
             print(f"Skipping {seg_name} due to missing data.")
             continue
@@ -281,12 +286,44 @@ def main():
             if interrupt_flag[0]:
                 break
             
-            # Load basic image for background
-            img_path = os.path.join(raw_dir, f"{local_idx:06d}.png")
-            if os.path.exists(img_path):
-                img_np = np.array(Image.open(img_path).convert('RGB'))
-            else:
-                img_np = np.zeros((224, 224, 3), dtype=np.uint8)
+            # Construct 4x4 grid of images for the background (visualizing Alpamayo input)
+            cameras = ["raw", "raw_front", "raw_right", "raw_left"]
+            num_visual_frames = 4
+            frame_stride = 2
+            target_w, target_h = 320, 240
+            
+            grid_rows = []
+            for cam in cameras:
+                cam_dir = os.path.join(seg_dir, cam)
+                row_imgs = []
+                for i in range(num_visual_frames):
+                    idx = local_idx - (num_visual_frames - 1 - i) * frame_stride
+                    idx = max(0, idx)
+                    img_path_png = os.path.join(cam_dir, f"{idx:06d}.png")
+                    img_path_jpg = os.path.join(cam_dir, f"{idx:06d}.jpg")
+                    
+                    img_path = None
+                    if os.path.exists(img_path_png):
+                        img_path = img_path_png
+                    elif os.path.exists(img_path_jpg):
+                        img_path = img_path_jpg
+                        
+                    if img_path:
+                        img = np.array(Image.open(img_path).convert('RGB'))
+                    else:
+                        img = np.zeros((target_h, target_w, 3), dtype=np.uint8)
+                        
+                    if img.shape[:2] != (target_h, target_w):
+                        img = cv2.resize(img, (target_w, target_h))
+                    
+                    # Label the camera on the final t0 frame to match the grid
+                    if i == num_visual_frames - 1:
+                        cv2.putText(img, cam, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+                        
+                    row_imgs.append(img)
+                grid_rows.append(np.hstack(row_imgs))
+                
+            img_np = np.vstack(grid_rows)
                 
             if out is None:
                 h, w, _ = img_np.shape
@@ -460,42 +497,17 @@ def main():
 
             # Draw wrapped text onto image. In compare mode, keep the overlay concise and
             # rely on the colored trajectory groups plus console logs for the per-command CoT.
-            overlay_text = cot
-            # Scale font relative to frame height so text never overwhelms the video
+            # Only display the navigation command at the top
             font_face = cv2.FONT_HERSHEY_SIMPLEX
-            font_scale = max(0.3, h / 1000.0)  # e.g. 0.48 for 480p, 1.08 for 1080p
-            font_thickness = max(1, int(font_scale * 2))
-            text_margin = max(10, int(w * 0.02))
-            usable_width = w - (text_margin * 2)
-            # Measure average character width with a reference string
-            (ref_w, ref_h), _ = cv2.getTextSize("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", font_face, font_scale, font_thickness)
-            char_width = ref_w / 52.0
-            line_height = int(ref_h * 1.8)
-            wrap_chars = max(20, int(usable_width / char_width))
-            wrapped_text = textwrap.wrap(overlay_text, width=wrap_chars) if overlay_text else []
+            font_scale = max(0.8, h / 1000.0)
+            font_thickness = max(2, int(font_scale * 2))
             
-            # Budget: text block must not exceed 1/5 of the frame height
-            max_text_height = h // 5
-            top_pad = int(line_height * 0.8)
-            # Reserve one line for the nav-command label at the bottom of the block
-            max_cot_lines = max(1, (max_text_height - top_pad - line_height) // line_height)
-            if len(wrapped_text) > max_cot_lines:
-                wrapped_text = wrapped_text[:max_cot_lines - 1] + [wrapped_text[max_cot_lines - 1] + " ..."]
-
-            y_text = top_pad + line_height  # first baseline
-            total_bg_height = top_pad + len(wrapped_text) * line_height + line_height + int(line_height * 0.4)
-            total_bg_height = min(total_bg_height, max_text_height)
+            # Draw black background rectangle for text
+            text_size, _ = cv2.getTextSize(overlay_summary, font_face, font_scale, font_thickness)
+            cv2.rectangle(img_np, (10, 10), (10 + text_size[0] + 20, 10 + text_size[1] + 20), (0, 0, 0), -1)
             
-            # Background rectangle for easy text reading (black)
-            cv2.rectangle(img_np, (text_margin - 5, top_pad // 2), (w - text_margin + 5, top_pad // 2 + total_bg_height), (0, 0, 0), -1)
-            
-            # Draw CoT lines (green)
-            for line in wrapped_text:
-                cv2.putText(img_np, line, (text_margin, y_text), font_face, font_scale, (0, 255, 0), font_thickness)
-                y_text += line_height
-            
-            # The frame is RGB until the final conversion to BGR, so use RGB tuples here.
-            cv2.putText(img_np, overlay_summary, (text_margin, y_text + int(line_height * 0.3)), font_face, font_scale, (255, 165, 0), font_thickness)
+            # Draw nav command
+            cv2.putText(img_np, overlay_summary, (20, 10 + text_size[1] + 10), font_face, font_scale, (255, 165, 0), font_thickness)
                 
             # Convert once and write twice to effectively play 20Hz frames at 40 FPS seamlessly
             bgr_frame = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
