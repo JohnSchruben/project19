@@ -1,86 +1,35 @@
 # LLM Model Tests
 
-## Setup
-Install dependencies and Ollama:
+This directory serves as the dedicated sandbox for running standalone tests against **Alpamayo** inference pipelines, extracting specific route tests, and managing the associated route frame database.
+
+## Database Management
+
+An integrated SQLite database (`annotations.db`) is used for managing, filtering, and querying specifically extracted route dashcam frames prior to Alpamayo ingestion.
+
+### Interacting with the CLI:
 ```bash
-python install_dependencies.py
+python import_annotations.py  # Bulk import route frame extractions into DB
 ```
 
-## Running Tests
-Run all models (automatically uses `driving_prompt.txt`):
-```bash
-python runall.py --image <path_to_image>
-```
-
-## Generating Dataset
-Generate training data using a base model (LLaVA), using `driving_prompt.txt`:
-```bash
-python generate-dataset.py
-```
-
-## Training LoRA
-Fine-tune a model using the generated dataset:
-```bash
-python train_lora.py
-```
-
-## Viewing Dataset
-Verify the dataset and images:
-```bash
-python ../dataset/dataset_viewer.py
-```
-
-## Performance Benchmarking
-Test real-time performance constraints (20 FPS requirement):
-```bash
-
-# Install benchmark dependencies
-pip install psutil GPUtil
-
-# Run benchmark on all models
-python benchmark.py
-
-# Run automated performance tests (fails if more than 50ms latency)
-python test_performance.py
-```
-
-Results saved to 'benchmarks/' folder
-
-
-## End-to-End Pipeline Testing
-Test the complete video → LLM → navigation pipeline:
-```bash
-
-# Install OpenCV if not already installed
-pip install opencv-python
-
-# Run pipeline test (!!replace with your video file path!!)
-python pipeline_integration_test.py --video "[video file path here]" --model moondream --max-frames 20
-
-
-# Test full video
-python pipeline_integration_test.py --video "[video file path here]" --model llava
-
-# Adjust extraction rate (frames per second)
-python pipeline_integration_test.py --video "[video file path here]" --model moondream --fps-extract 1.0
-```
-
-What it tests:
-- Video frame extraction
-- LLM inference on each frame
-- Navigation output validation (steering -180° to 180°, throttle/brake 0.0 to 1.0)
-- End-to-end pipeline performance
-
-Results saved to `pipeline_results/pipeline_test_*.json`
-
-## Database 
-SQLite database for storing and querying annotated dashcam frames:
-```bash
-python import_annotations.py  # import frames into DB
-```
+### Programmatic Python Access:
 ```python
 from dataset_manager import DatasetManager
+
+# Initialize the manager
 db = DatasetManager()
+
+# Example: Push a new telemetry-bound frame into records
 db.add_frame("frame.jpg", "frames/frame.jpg")
 ```
-See `README_DATABASE.md` for full documentation.
+
+## Alpamayo Evaluation Utilities
+
+```bash
+./setup_alpamayo.sh  # Establish the virtual environment wrapper 
+
+# Standardized unit testing and basic execution checks over the model tensor operations 
+python test_alpamayo.py
+
+# Graph visualization rendering wrapper for model trajectory confidence bounds
+python visualize_alpamayo.py
+```
