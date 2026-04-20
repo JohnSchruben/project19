@@ -1,8 +1,40 @@
 import os
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 import sys
 import glob
 import argparse
+
+def get_default_route():
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'datasets'))
+    dirs = [d for d in glob.glob(os.path.join(base_dir, '*')) if os.path.isdir(d)]
+    if dirs:
+        dirs.sort()
+        return dirs[0]
+    return None
+
+parser = argparse.ArgumentParser(description="Headless batch video exporter with Alpamayo inference.")
+parser.add_argument("--route", type=str, default=get_default_route(), 
+                    help="Path to a route directory containing segments")
+parser.add_argument("--frames", type=int, default=16, 
+                    help="Number of future frames to graph for predictions")
+parser.add_argument("--command", type=str, default=None, 
+                    help="Optional navigation command to inject into Alpamayo prompt (e.g., 'Turn Right')")
+parser.add_argument("--segment", type=str, default=None,
+                    help="Process only a specific segment (e.g., 'segment_00')")
+parser.add_argument("--start-frame", type=int, default=0,
+                    help="First frame index to process within the segment (inclusive)")
+parser.add_argument("--end-frame", type=int, default=None,
+                    help="Last frame index to process within the segment (inclusive)")
+parser.add_argument("--num-traj-samples", type=int, default=6,
+                    help="Number of trajectory samples to draw per condition")
+parser.add_argument("--guidance-weight", type=float, default=1.5,
+                    help="Classifier-free guidance weight for nav-conditioned inference")
+parser.add_argument("--max-gen-length", type=int, default=256,
+                    help="Maximum generation length for the trajectory diffusion model. Lower speeds it up but reduces max distance.")
+parser.add_argument("--plot-all-samples", action="store_true",
+                    help="Plot all trajectory samples instead of just the selected best path")
+global_args = parser.parse_args()
+
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 import numpy as np
 import cv2
 import torch
@@ -25,15 +57,6 @@ TURN_COLOR_MAP = {
     "Command": "lime",
     "Sample": "gray",
 }
-
-
-def get_default_route():
-    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'datasets'))
-    dirs = [d for d in glob.glob(os.path.join(base_dir, '*')) if os.path.isdir(d)]
-    if dirs:
-        dirs.sort()
-        return dirs[0]
-    return None
 
 import signal
 
@@ -146,28 +169,7 @@ def plot_dotted_path(ax, xs: np.ndarray, ys: np.ndarray, color: str, label: str)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Headless batch video exporter with Alpamayo inference.")
-    parser.add_argument("--route", type=str, default=get_default_route(), 
-                        help="Path to a route directory containing segments")
-    parser.add_argument("--frames", type=int, default=16, 
-                        help="Number of future frames to graph for predictions")
-    parser.add_argument("--command", type=str, default=None, 
-                        help="Optional navigation command to inject into Alpamayo prompt (e.g., 'Turn Right')")
-    parser.add_argument("--segment", type=str, default=None,
-                        help="Process only a specific segment (e.g., 'segment_00')")
-    parser.add_argument("--start-frame", type=int, default=0,
-                        help="First frame index to process within the segment (inclusive)")
-    parser.add_argument("--end-frame", type=int, default=None,
-                        help="Last frame index to process within the segment (inclusive)")
-    parser.add_argument("--num-traj-samples", type=int, default=6,
-                        help="Number of trajectory samples to draw per condition")
-    parser.add_argument("--guidance-weight", type=float, default=1.5,
-                        help="Classifier-free guidance weight for nav-conditioned inference")
-    parser.add_argument("--max-gen-length", type=int, default=256,
-                        help="Maximum generation length for the trajectory diffusion model. Lower speeds it up but reduces max distance.")
-    parser.add_argument("--plot-all-samples", action="store_true",
-                        help="Plot all trajectory samples instead of just the selected best path")
-    args = parser.parse_args()
+    args = global_args
     
     # Safe interrupt flag to gracefully finish the current frame and save the video seamlessly
     interrupt_flag = [False]
