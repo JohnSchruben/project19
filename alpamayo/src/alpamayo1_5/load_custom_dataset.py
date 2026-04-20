@@ -199,6 +199,7 @@ def load_custom_dataset(
             img_path = os.path.join(cam_dir, f"{idx:06d}.png")
             if os.path.exists(img_path):
                 img = Image.open(img_path).convert('RGB')
+                img = img.resize((224, 224), Image.Resampling.BILINEAR)
                 img_np = np.array(img)
             else:
                 img_np = np.zeros((224, 224, 3), dtype=np.uint8)
