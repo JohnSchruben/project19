@@ -14,7 +14,7 @@ def get_default_route():
 parser = argparse.ArgumentParser(description="Headless batch video exporter with Alpamayo inference.")
 parser.add_argument("--route", type=str, default=get_default_route(), 
                     help="Path to a route directory containing segments")
-parser.add_argument("--frames", type=int, default=16, 
+parser.add_argument("--frames", type=int, default=64, 
                     help="Number of future frames to graph for predictions")
 parser.add_argument("--command", type=str, default=None, 
                     help="Optional navigation command to inject into Alpamayo prompt (e.g., 'Turn Right')")
