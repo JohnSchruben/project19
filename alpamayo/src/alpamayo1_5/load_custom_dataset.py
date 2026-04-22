@@ -243,7 +243,7 @@ def load_custom_dataset(
     num_history_steps: int = 16,
     num_future_steps: int = 64,
     time_step: float = 0.1,
-    frame_stride: int = 2,
+    frame_stride: int = 1,
     visual_stride: int = 1,
     exclude_cameras: list[int] = None,
 ):
@@ -255,6 +255,9 @@ def load_custom_dataset(
     across neighboring segment_* folders when available, then sample:
       - history at [..., t0-0.2, t0-0.1, t0]
       - future at [t0+0.1, ..., t0+6.4]
+
+    ``frame_stride`` and ``visual_stride`` are legacy compatibility arguments and
+    are ignored by this loader.
     """
     del frame_stride, visual_stride  # Kept in the signature for notebook compatibility.
 

@@ -92,6 +92,7 @@ def run_pipeline(args):
     modeld_env["MODELD_DATASET_DIR"] = str(dataset_dir)
     modeld_env["MODELD_MAX_SEGMENT"] = str(args.max_segment)
     modeld_env["MODELD_SEGMENT_FRAMES"] = str(args.segment_frames)
+    modeld_env["MODELD_DATASET_TARGET_FPS"] = str(args.dataset_fps)
     # Ensure python path includes openpilot dir
     modeld_env["PYTHONPATH"] = f"{op_dir}:{modeld_env.get('PYTHONPATH', '')}"
 
@@ -138,7 +139,13 @@ def run_pipeline(args):
     print(f"Working Directory: {op_dir}")
     print(f"Replay Command: {' '.join(replay_cmd)}")
     print(f"Modeld Command: {' '.join(modeld_cmd)}")
-    print(f"Modeld Env: MODELD_DATASET_DIR={dataset_dir}, MODELD_MAX_SEGMENT={args.max_segment}, MODELD_SEGMENT_FRAMES={args.segment_frames}")
+    print(
+        "Modeld Env: "
+        f"MODELD_DATASET_DIR={dataset_dir}, "
+        f"MODELD_MAX_SEGMENT={args.max_segment}, "
+        f"MODELD_SEGMENT_FRAMES={args.segment_frames}, "
+        f"MODELD_DATASET_TARGET_FPS={args.dataset_fps}"
+    )
     if new_terminal_modeld:
         print("Modeld will run in a NEW TERMINAL window.")
     if new_terminal_replay:
@@ -236,10 +243,12 @@ if __name__ == "__main__":
     # Modeld arguments
     parser.add_argument("--dataset-dir", type=str, default="./datasets/leaf_run",
                         help="Directory for modeld output (default: ./datasets/leaf_run)")
-    parser.add_argument("--max-segment", type=int, default=12,
-                        help="Max segment for modeld (default: 12)")
+    parser.add_argument("--max-segment", type=int, default=20,
+                        help="Max segment for modeld (default: 20)")
     parser.add_argument("--segment-frames", type=int, default=175,
                         help="Frames per segment (MODELD_SEGMENT_FRAMES) (default: 175)")
+    parser.add_argument("--dataset-fps", type=float, default=10.0,
+                        help="Target dataset capture FPS for raw/telemetry/features (default: 10.0)")
     parser.add_argument("--modeld-path", type=str, default="selfdrive/modeld/modeld_detection_second.py",
                         help="Path to modeld script (default: selfdrive/modeld/modeld_detection_second.py)")
 

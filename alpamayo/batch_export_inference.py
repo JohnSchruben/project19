@@ -35,6 +35,10 @@ parser.add_argument("--cameras", nargs="+", choices=["wide", "left", "right", "f
                     help="Cameras to include (wide, left, right, front). Unlisted cameras will be excluded.")
 parser.add_argument("--max-gen-length", type=int, default=256,
                     help="Maximum generation length for the trajectory diffusion model. Lower speeds it up but reduces max distance.")
+parser.add_argument("--dataset-fps", type=float, default=10.0,
+                    help="Dataset frame rate used for export timing (default: 10.0).")
+parser.add_argument("--output-fps", type=float, default=40.0,
+                    help="Output video frame rate (default: 40.0).")
 parser.add_argument("--plot-all-samples", action="store_true",
                     help="Plot all trajectory samples instead of just the selected best path")
 global_args = parser.parse_args()
@@ -213,6 +217,9 @@ def main():
         return
 
     cam_mapping = {"left": 0, "wide": 1, "right": 2, "front": 6}
+    frame_repeat = 1
+    if args.dataset_fps > 0 and args.output_fps > 0:
+        frame_repeat = max(1, int(round(args.output_fps / args.dataset_fps)))
     excluded_cameras = []
     for name, idx in cam_mapping.items():
         if name not in args.cameras:
@@ -357,11 +364,10 @@ def main():
                 img_np[target_h:target_h*2, 0:target_w] = load_cam_img("raw_left", target_w, target_h) # Bottom Left
                 img_np[target_h:target_h*2, target_w:target_w*2] = load_cam_img("raw_right", target_w, target_h) # Bottom Right
                 
-            if out is None:
-                h, w, _ = img_np.shape
-                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-                # Encoding at 40 FPS to force media players to respect 1x playback speed without speeding it up
-                out = cv2.VideoWriter(output_video_path, fourcc, 40.0, (w, h))
+                if out is None:
+                    h, w, _ = img_np.shape
+                    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                    out = cv2.VideoWriter(output_video_path, fourcc, args.output_fps, (w, h))
 
             try:
                 data = load_custom_dataset(seg_dir, local_idx, exclude_cameras=excluded_cameras)
@@ -581,10 +587,10 @@ def main():
                 fg = cv2.bitwise_and(overlay_img, overlay_img, mask=mask)
                 img_np[roi_y1:roi_y2, roi_x1:roi_x2] = cv2.add(bg, fg)
                 
-            # Convert once and write twice to effectively play 20Hz frames at 40 FPS seamlessly
+            # Repeat each dataset frame so playback speed matches the source dataset FPS.
             bgr_frame = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
-            out.write(bgr_frame)
-            out.write(bgr_frame)
+            for _ in range(frame_repeat):
+                out.write(bgr_frame)
             
         if out is not None:
             out.release()
