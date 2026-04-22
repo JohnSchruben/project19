@@ -434,8 +434,8 @@ def main():
                             active_turn_cmd = "Go Straight"
                             
                     if active_turn_cmd != "Go Straight":
-                        if turn_dist_m <= 5.0:
-                            # If we are physically inside the junction (< 5m), drop the distance naturally to just 'Turn left'
+                        if turn_dist_m <= 0.0:
+                            # The car has already started turning, so drop the distance (0m)
                             nav_cmd = active_turn_cmd
                         else:
                             nav_cmd = f"{active_turn_cmd} in {int(turn_dist_m)}m"
