@@ -18,6 +18,12 @@ CAMERA_DIRS = [
     ("raw_front", 6),  # front-tele
 ]
 
+MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
+SRC_DIR = os.path.dirname(MODULE_DIR)
+ALPAMAYO_DIR = os.path.dirname(SRC_DIR)
+PROJECT_DIR = os.path.dirname(ALPAMAYO_DIR)
+NOTEBOOKS_DIR = os.path.join(ALPAMAYO_DIR, "notebooks")
+
 ROUTE_CONTEXT_CACHE: dict[str, dict] = {}
 
 
@@ -76,6 +82,32 @@ def _load_telemetry_series(telemetry_dir: str) -> tuple[np.ndarray, np.ndarray, 
         raise RuntimeError("Telemetry timestamps are not monotonic")
 
     return timestamps_s, speeds_m_s, yaw_rates_rad_s
+
+
+def _resolve_segment_dir(segment_dir: str) -> str:
+    """Resolve a segment path against common repo roots and notebook locations."""
+    if os.path.isabs(segment_dir):
+        return segment_dir
+
+    candidates = []
+    seen = set()
+
+    def add_candidate(path: str) -> None:
+        norm = os.path.normpath(os.path.abspath(path))
+        if norm not in seen:
+            seen.add(norm)
+            candidates.append(norm)
+
+    add_candidate(segment_dir)
+    add_candidate(os.path.join(PROJECT_DIR, segment_dir))
+    add_candidate(os.path.join(ALPAMAYO_DIR, segment_dir))
+    add_candidate(os.path.join(NOTEBOOKS_DIR, segment_dir))
+
+    for candidate in candidates:
+        if os.path.isdir(os.path.join(candidate, "telemetry")):
+            return candidate
+
+    return candidates[0]
 
 
 def _discover_route_segments(segment_dir: str) -> tuple[list[str], str]:
@@ -261,13 +293,14 @@ def load_custom_dataset(
     """
     del frame_stride, visual_stride  # Kept in the signature for notebook compatibility.
 
-    abs_segment_dir = os.path.abspath(segment_dir)
-    telemetry_dir = os.path.join(segment_dir, "telemetry")
+    resolved_segment_dir = _resolve_segment_dir(segment_dir)
+    abs_segment_dir = os.path.abspath(resolved_segment_dir)
+    telemetry_dir = os.path.join(abs_segment_dir, "telemetry")
 
     if not os.path.isdir(telemetry_dir):
         raise FileNotFoundError(f"Telemetry directory not found: {telemetry_dir}")
 
-    route_context = _load_route_context(segment_dir)
+    route_context = _load_route_context(abs_segment_dir)
     segment_start_indices = route_context["segment_start_indices"]
     if abs_segment_dir not in segment_start_indices:
         raise RuntimeError(f"Segment {segment_dir} is missing from the route telemetry context")
@@ -345,7 +378,7 @@ def load_custom_dataset(
     for dir_name, cam_idx in CAMERA_DIRS:
         if cam_idx in exclude_cameras:
             continue
-        cam_dir = os.path.join(segment_dir, dir_name)
+        cam_dir = os.path.join(abs_segment_dir, dir_name)
         if not os.path.isdir(cam_dir):
             continue
         if not any(name.lower().endswith(".png") for name in os.listdir(cam_dir)):
