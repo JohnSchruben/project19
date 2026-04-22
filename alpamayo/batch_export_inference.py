@@ -363,17 +363,18 @@ def main():
                 img_np[0:target_h, 0:target_w] = load_cam_img("raw", target_w, target_h)           # Top Left
                 img_np[target_h:target_h*2, 0:target_w] = load_cam_img("raw_left", target_w, target_h) # Bottom Left
                 img_np[target_h:target_h*2, target_w:target_w*2] = load_cam_img("raw_right", target_w, target_h) # Bottom Right
-                
-                if out is None:
-                    h, w, _ = img_np.shape
-                    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-                    out = cv2.VideoWriter(output_video_path, fourcc, args.output_fps, (w, h))
+
+            if out is None:
+                h, w, _ = img_np.shape
+                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                out = cv2.VideoWriter(output_video_path, fourcc, args.output_fps, (w, h))
 
             try:
                 data = load_custom_dataset(seg_dir, local_idx, exclude_cameras=excluded_cameras)
             except Exception as e:
                 print(f"Error loading data for {seg_name} frame {local_idx}: {e}")
-                out.write(cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR))
+                if out is not None:
+                    out.write(cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR))
                 continue
 
             gt_rot = data["ego_future_rot"][0, 0].numpy()
