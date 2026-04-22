@@ -26,6 +26,8 @@ parser.add_argument("--end-frame", type=int, default=None,
                     help="Last frame index to process within the segment (inclusive)")
 parser.add_argument("--num-traj-samples", type=int, default=16,
                     help="Number of trajectory samples to draw per condition")
+parser.add_argument("--selection-mode", choices=["heuristic", "mean", "median"], default="heuristic",
+                    help="How to collapse sampled trajectories into the displayed path.")
 parser.add_argument("--guidance-weight", type=float, default=1.5,
                     help="Classifier-free guidance weight for nav-conditioned inference")
 parser.add_argument("--cameras", nargs="+", choices=["wide", "left", "right", "front"],
@@ -148,26 +150,43 @@ def select_prediction_xy(
     pred_tensor,
     nav_cmd: str,
     num_frames: int,
+    selection_mode: str = "heuristic",
 ) -> tuple[np.ndarray, np.ndarray, int, int]:
     pred_np = pred_tensor.detach().cpu().numpy()[0, 0]
     if pred_np.shape[0] == 0:
         return np.array([0.0]), np.array([0.0]), 0, 0
 
-    nav_lower = nav_cmd.lower()
-    final_lateral = pred_np[:, -1, 1]
-    final_forward = pred_np[:, -1, 0]
-
-    if "left" in nav_lower:
-        sample_idx = int(np.argmax(final_lateral))
-    elif "right" in nav_lower:
-        sample_idx = int(np.argmin(final_lateral))
-    elif "straight" in nav_lower:
-        sample_idx = int(np.argmin(np.abs(final_lateral)))
+    if selection_mode == "mean":
+        selected = pred_np.mean(axis=0)
+        sample_idx = int(
+            np.argmin(
+                np.linalg.norm(pred_np[:, :, :2] - selected[None, :, :2], axis=-1).mean(axis=1)
+            )
+        )
+    elif selection_mode == "median":
+        selected = np.median(pred_np, axis=0)
+        sample_idx = int(
+            np.argmin(
+                np.linalg.norm(pred_np[:, :, :2] - selected[None, :, :2], axis=-1).mean(axis=1)
+            )
+        )
     else:
-        # Fallback to the sample that goes furthest forward while staying centered.
-        sample_idx = int(np.argmax(final_forward - np.abs(final_lateral)))
+        nav_lower = nav_cmd.lower()
+        final_lateral = pred_np[:, -1, 1]
+        final_forward = pred_np[:, -1, 0]
 
-    selected = pred_np[sample_idx]
+        if "left" in nav_lower:
+            sample_idx = int(np.argmax(final_lateral))
+        elif "right" in nav_lower:
+            sample_idx = int(np.argmin(final_lateral))
+        elif "straight" in nav_lower:
+            sample_idx = int(np.argmin(np.abs(final_lateral)))
+        else:
+            # Fallback to the sample that goes furthest forward while staying centered.
+            sample_idx = int(np.argmax(final_forward - np.abs(final_lateral)))
+
+        selected = pred_np[sample_idx]
+
     n_frames = min(num_frames, selected.shape[0])
     pred_x = np.concatenate(([0.0], selected[:n_frames, 0]))
     pred_y = np.concatenate(([0.0], selected[:n_frames, 1]))
@@ -440,13 +459,25 @@ def main():
             pred_plot_data = []
             max_common_frames = gt_xyz.shape[0]
             for label, cmd_text, pred_xyz, extra in nav_runs:
-                pred_x, pred_y, pred_frames, sample_idx = select_prediction_xy(pred_xyz, cmd_text, args.frames)
+                pred_x, pred_y, pred_frames, sample_idx = select_prediction_xy(
+                    pred_xyz,
+                    cmd_text,
+                    args.frames,
+                    selection_mode=args.selection_mode,
+                )
                 
                 cot = extract_cot(extra, sample_idx)
-                print(
-                    f"[{seg_name} | Frame {local_idx}] Cmd: \033[92m{cmd_text}\033[0m | "
-                    f"Reasoning: \033[38;2;255;165;0m{cot}\033[0m"
-                )
+                if args.selection_mode == "heuristic":
+                    print(
+                        f"[{seg_name} | Frame {local_idx}] Cmd: \033[92m{cmd_text}\033[0m | "
+                        f"Reasoning: \033[38;2;255;165;0m{cot}\033[0m"
+                    )
+                else:
+                    print(
+                        f"[{seg_name} | Frame {local_idx}] Cmd: \033[92m{cmd_text}\033[0m | "
+                        f"Display Path: \033[96m{args.selection_mode}\033[0m | "
+                        f"Representative Reasoning: \033[38;2;255;165;0m{cot}\033[0m"
+                    )
                 
                 if args.plot_all_samples:
                     pred_np = pred_xyz.detach().cpu().numpy()[0, 0]
