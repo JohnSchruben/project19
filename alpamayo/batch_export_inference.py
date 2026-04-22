@@ -304,11 +304,9 @@ def main():
             if interrupt_flag[0]:
                 break
             
-            # Construct 2x2 grid of images for the background
-            target_w, target_h = 640, 480
-            img_np = np.zeros((target_h * 2, target_w * 2, 3), dtype=np.uint8)
+            single_camera_mode = len(args.cameras) == 1
             
-            def load_cam_img(cam_dir_name):
+            def load_cam_img(cam_dir_name, tw, th):
                 cam_dir = os.path.join(seg_dir, cam_dir_name)
                 img_path_png = os.path.join(cam_dir, f"{local_idx:06d}.png")
                 img_path_jpg = os.path.join(cam_dir, f"{local_idx:06d}.jpg")
@@ -316,15 +314,29 @@ def main():
                 if img_path:
                     img = np.array(Image.open(img_path).convert('RGB'))
                 else:
-                    img = np.zeros((target_h, target_w, 3), dtype=np.uint8)
-                if img.shape[:2] != (target_h, target_w):
-                    img = cv2.resize(img, (target_w, target_h))
+                    img = np.zeros((th, tw, 3), dtype=np.uint8)
+                if img.shape[:2] != (th, tw):
+                    img = cv2.resize(img, (tw, th))
                 cv2.putText(img, cam_dir_name, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
                 return img
 
-            img_np[0:target_h, 0:target_w] = load_cam_img("raw")           # Top Left
-            img_np[target_h:target_h*2, 0:target_w] = load_cam_img("raw_left") # Bottom Left
-            img_np[target_h:target_h*2, target_w:target_w*2] = load_cam_img("raw_right") # Bottom Right
+            if single_camera_mode:
+                target_w, target_h = 1280, 960
+                
+                cam_name = "raw"
+                if "front" in args.cameras: cam_name = "raw_front"
+                elif "left" in args.cameras: cam_name = "raw_left"
+                elif "right" in args.cameras: cam_name = "raw_right"
+                
+                img_np = load_cam_img(cam_name, target_w, target_h)
+            else:
+                # Construct 2x2 grid of images for the background
+                target_w, target_h = 640, 480
+                img_np = np.zeros((target_h * 2, target_w * 2, 3), dtype=np.uint8)
+                
+                img_np[0:target_h, 0:target_w] = load_cam_img("raw", target_w, target_h)           # Top Left
+                img_np[target_h:target_h*2, 0:target_w] = load_cam_img("raw_left", target_w, target_h) # Bottom Left
+                img_np[target_h:target_h*2, target_w:target_w*2] = load_cam_img("raw_right", target_w, target_h) # Bottom Right
                 
             if out is None:
                 h, w, _ = img_np.shape
@@ -483,7 +495,7 @@ def main():
             ax_export.set_ylim(y_c - max_range, y_c + max_range)
             ax_export.axis('off')
             
-            # Draw text in the empty Top Right quadrant
+            # Draw text
             font_face = cv2.FONT_HERSHEY_SIMPLEX
             font_scale = 0.6  # smaller text
             font_thickness = 1
@@ -496,8 +508,13 @@ def main():
                 ""
             ] + wrapped_cot
             
-            text_x = target_w + 20
-            text_y = 40
+            if single_camera_mode:
+                text_x = 20
+                text_y = 60
+            else:
+                text_x = target_w + 20
+                text_y = 40
+                
             for line in lines_to_draw:
                 # Black outline for visibility
                 cv2.putText(img_np, line, (text_x, text_y), font_face, font_scale, (0, 0, 0), font_thickness + 2)
@@ -515,13 +532,19 @@ def main():
             gray = cv2.cvtColor(overlay_img, cv2.COLOR_RGB2GRAY)
             mask = cv2.threshold(gray, 240, 255, cv2.THRESH_BINARY_INV)[1]
             
-            # Place graph in TOP RIGHT quadrant below the text
-            roi_y1 = max(140, text_y + 10)
+            if single_camera_mode:
+                # Place graph in top right of the single image
+                roi_y1 = 40
+                roi_x1 = 1280 - overlay_size[0] - 40
+            else:
+                # Place graph in TOP RIGHT quadrant below the text
+                roi_y1 = max(140, text_y + 10)
+                roi_x1 = target_w + (target_w - overlay_size[0]) // 2
+                
             roi_y2 = roi_y1 + overlay_size[1]
-            roi_x1 = target_w + (target_w - overlay_size[0]) // 2
             roi_x2 = roi_x1 + overlay_size[0]
             
-            if roi_y2 <= target_h * 2 and roi_x2 <= target_w * 2:
+            if roi_y2 <= img_np.shape[0] and roi_x2 <= img_np.shape[1]:
                 roi = img_np[roi_y1:roi_y2, roi_x1:roi_x2]
                 bg = cv2.bitwise_and(roi, roi, mask=cv2.bitwise_not(mask))
                 fg = cv2.bitwise_and(overlay_img, overlay_img, mask=mask)
