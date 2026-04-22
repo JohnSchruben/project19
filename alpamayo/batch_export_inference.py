@@ -304,49 +304,27 @@ def main():
             if interrupt_flag[0]:
                 break
             
-            # Construct 4x4 grid of images for the background (visualizing Alpamayo input)
-            cameras = []
-            if "wide" in args.cameras: cameras.append("raw")
-            if "front" in args.cameras: cameras.append("raw_front")
-            if "right" in args.cameras: cameras.append("raw_right")
-            if "left" in args.cameras: cameras.append("raw_left")
+            # Construct 2x2 grid of images for the background
+            target_w, target_h = 640, 480
+            img_np = np.zeros((target_h * 2, target_w * 2, 3), dtype=np.uint8)
             
-            num_visual_frames = 4
-            frame_stride = 2
-            target_w, target_h = 320, 240
-            
-            grid_rows = []
-            for cam in cameras:
-                cam_dir = os.path.join(seg_dir, cam)
-                row_imgs = []
-                for i in range(num_visual_frames):
-                    idx = local_idx - (num_visual_frames - 1 - i) * frame_stride
-                    idx = max(0, idx)
-                    img_path_png = os.path.join(cam_dir, f"{idx:06d}.png")
-                    img_path_jpg = os.path.join(cam_dir, f"{idx:06d}.jpg")
-                    
-                    img_path = None
-                    if os.path.exists(img_path_png):
-                        img_path = img_path_png
-                    elif os.path.exists(img_path_jpg):
-                        img_path = img_path_jpg
-                        
-                    if img_path:
-                        img = np.array(Image.open(img_path).convert('RGB'))
-                    else:
-                        img = np.zeros((target_h, target_w, 3), dtype=np.uint8)
-                        
-                    if img.shape[:2] != (target_h, target_w):
-                        img = cv2.resize(img, (target_w, target_h))
-                    
-                    # Label the camera on the final t0 frame to match the grid
-                    if i == num_visual_frames - 1:
-                        cv2.putText(img, cam, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
-                        
-                    row_imgs.append(img)
-                grid_rows.append(np.hstack(row_imgs))
-                
-            img_np = np.vstack(grid_rows)
+            def load_cam_img(cam_dir_name):
+                cam_dir = os.path.join(seg_dir, cam_dir_name)
+                img_path_png = os.path.join(cam_dir, f"{local_idx:06d}.png")
+                img_path_jpg = os.path.join(cam_dir, f"{local_idx:06d}.jpg")
+                img_path = img_path_png if os.path.exists(img_path_png) else (img_path_jpg if os.path.exists(img_path_jpg) else None)
+                if img_path:
+                    img = np.array(Image.open(img_path).convert('RGB'))
+                else:
+                    img = np.zeros((target_h, target_w, 3), dtype=np.uint8)
+                if img.shape[:2] != (target_h, target_w):
+                    img = cv2.resize(img, (target_w, target_h))
+                cv2.putText(img, cam_dir_name, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+                return img
+
+            img_np[0:target_h, 0:target_w] = load_cam_img("raw")           # Top Left
+            img_np[target_h:target_h*2, 0:target_w] = load_cam_img("raw_left") # Bottom Left
+            img_np[target_h:target_h*2, target_w:target_w*2] = load_cam_img("raw_right") # Bottom Right
                 
             if out is None:
                 h, w, _ = img_np.shape
@@ -505,33 +483,49 @@ def main():
             ax_export.set_ylim(y_c - max_range, y_c + max_range)
             ax_export.axis('off')
             
+            # Draw text in the empty Top Right quadrant
+            font_face = cv2.FONT_HERSHEY_SIMPLEX
+            font_scale = 0.6  # smaller text
+            font_thickness = 1
+            
+            wrapped_cot = textwrap.wrap(f"Reasoning: {cot}", width=60)
+            
+            lines_to_draw = [
+                f"[{seg_name} | Frame {local_idx}]",
+                f"Cmd: {nav_cmd}",
+                ""
+            ] + wrapped_cot
+            
+            text_x = target_w + 20
+            text_y = 40
+            for line in lines_to_draw:
+                # Black outline for visibility
+                cv2.putText(img_np, line, (text_x, text_y), font_face, font_scale, (0, 0, 0), font_thickness + 2)
+                # White text
+                cv2.putText(img_np, line, (text_x, text_y), font_face, font_scale, (255, 255, 255), font_thickness)
+                text_y += 25
+            
             fig_export.canvas.draw()
             rgba = np.asarray(fig_export.canvas.buffer_rgba())
             overlay_img = rgba[:, :, :3].copy()
+            
+            overlay_size = (340, 340)
             overlay_img = cv2.resize(overlay_img, overlay_size)
             
             gray = cv2.cvtColor(overlay_img, cv2.COLOR_RGB2GRAY)
             mask = cv2.threshold(gray, 240, 255, cv2.THRESH_BINARY_INV)[1]
             
-            h, w, _ = img_np.shape
-            roi = img_np[h-overlay_size[1]:h, w-overlay_size[0]:w]
-            bg = cv2.bitwise_and(roi, roi, mask=cv2.bitwise_not(mask))
-            fg = cv2.bitwise_and(overlay_img, overlay_img, mask=mask)
-            img_np[h-overlay_size[1]:h, w-overlay_size[0]:w] = cv2.add(bg, fg)
-
-            # Draw wrapped text onto image. In compare mode, keep the overlay concise and
-            # rely on the colored trajectory groups plus console logs for the per-command CoT.
-            # Only display the navigation command at the top
-            font_face = cv2.FONT_HERSHEY_SIMPLEX
-            font_scale = max(0.8, h / 1000.0)
-            font_thickness = max(2, int(font_scale * 2))
+            # Place graph in TOP RIGHT quadrant below the text
+            roi_y1 = max(140, text_y + 10)
+            roi_y2 = roi_y1 + overlay_size[1]
+            roi_x1 = target_w + (target_w - overlay_size[0]) // 2
+            roi_x2 = roi_x1 + overlay_size[0]
             
-            # Draw black background rectangle for text
-            text_size, _ = cv2.getTextSize(overlay_summary, font_face, font_scale, font_thickness)
-            cv2.rectangle(img_np, (10, 10), (10 + text_size[0] + 20, 10 + text_size[1] + 20), (0, 0, 0), -1)
-            
-            # Draw nav command
-            cv2.putText(img_np, overlay_summary, (20, 10 + text_size[1] + 10), font_face, font_scale, (255, 165, 0), font_thickness)
+            if roi_y2 <= target_h * 2 and roi_x2 <= target_w * 2:
+                roi = img_np[roi_y1:roi_y2, roi_x1:roi_x2]
+                bg = cv2.bitwise_and(roi, roi, mask=cv2.bitwise_not(mask))
+                fg = cv2.bitwise_and(overlay_img, overlay_img, mask=mask)
+                img_np[roi_y1:roi_y2, roi_x1:roi_x2] = cv2.add(bg, fg)
                 
             # Convert once and write twice to effectively play 20Hz frames at 40 FPS seamlessly
             bgr_frame = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
