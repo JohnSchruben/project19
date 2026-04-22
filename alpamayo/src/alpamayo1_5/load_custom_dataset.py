@@ -166,6 +166,7 @@ def load_custom_dataset(
     time_step: float = 0.1,
     frame_stride: int = 2,
     visual_stride: int = 1,
+    exclude_cameras: list[int] = None,
 ):
     """
     Load a route segment and resample kinematics to Alpamayo's expected 10Hz layout.
@@ -250,7 +251,12 @@ def load_custom_dataset(
     all_camera_frames = []
     all_camera_indices = []
 
+    if exclude_cameras is None:
+        exclude_cameras = []
+
     for dir_name, cam_idx in CAMERA_DIRS:
+        if cam_idx in exclude_cameras:
+            continue
         cam_dir = os.path.join(segment_dir, dir_name)
         if not os.path.isdir(cam_dir):
             continue
