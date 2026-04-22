@@ -26,8 +26,11 @@ parser.add_argument("--end-frame", type=int, default=None,
                     help="Last frame index to process within the segment (inclusive)")
 parser.add_argument("--num-traj-samples", type=int, default=16,
                     help="Number of trajectory samples to draw per condition")
-parser.add_argument("--guidance-weight", type=float, default=4.0,
+parser.add_argument("--guidance-weight", type=float, default=1.5,
                     help="Classifier-free guidance weight for nav-conditioned inference")
+parser.add_argument("--cameras", nargs="+", choices=["wide", "left", "right", "front"],
+                    default=["wide", "left", "right", "front"],
+                    help="Cameras to include (wide, left, right, front). Unlisted cameras will be excluded.")
 parser.add_argument("--max-gen-length", type=int, default=256,
                     help="Maximum generation length for the trajectory diffusion model. Lower speeds it up but reduces max distance.")
 parser.add_argument("--plot-all-samples", action="store_true",
@@ -190,6 +193,12 @@ def main():
         print(f"Error: Route directory '{args.route}' not found.")
         return
 
+    cam_mapping = {"left": 0, "wide": 1, "right": 2, "front": 6}
+    excluded_cameras = []
+    for name, idx in cam_mapping.items():
+        if name not in args.cameras:
+            excluded_cameras.append(idx)
+
     print("Loading Alpamayo model... (This will take a moment)")
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = Alpamayo1_5.from_pretrained(
@@ -296,7 +305,12 @@ def main():
                 break
             
             # Construct 4x4 grid of images for the background (visualizing Alpamayo input)
-            cameras = ["raw", "raw_front", "raw_right", "raw_left"]
+            cameras = []
+            if "wide" in args.cameras: cameras.append("raw")
+            if "front" in args.cameras: cameras.append("raw_front")
+            if "right" in args.cameras: cameras.append("raw_right")
+            if "left" in args.cameras: cameras.append("raw_left")
+            
             num_visual_frames = 4
             frame_stride = 2
             target_w, target_h = 320, 240
@@ -341,7 +355,7 @@ def main():
                 out = cv2.VideoWriter(output_video_path, fourcc, 40.0, (w, h))
 
             try:
-                data = load_custom_dataset(seg_dir, local_idx)
+                data = load_custom_dataset(seg_dir, local_idx, exclude_cameras=excluded_cameras)
             except Exception as e:
                 print(f"Error loading data for {seg_name} frame {local_idx}: {e}")
                 out.write(cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR))
