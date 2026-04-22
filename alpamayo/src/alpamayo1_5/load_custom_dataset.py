@@ -13,9 +13,9 @@ from PIL import Image, ImageOps
 
 CAMERA_DIRS = [
     ("raw_left", 0),   # cross-left
-    ("raw", 1),        # front-wide
+    ("raw_front", 1),  # swapped: front-tele is now main
     ("raw_right", 2),  # cross-right
-    ("raw_front", 6),  # front-tele
+    ("raw", 6),        # swapped: front-wide is now tele
 ]
 
 MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
