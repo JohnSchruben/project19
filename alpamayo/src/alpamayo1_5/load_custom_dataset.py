@@ -98,6 +98,35 @@ def _resolve_segment_dir(segment_dir: str) -> str:
             seen.add(norm)
             candidates.append(norm)
 
+    def resolve_with_trimmed_components(path: str) -> str | None:
+        """Resolve an absolute path when one or more real components have trailing whitespace."""
+        normalized = os.path.normpath(os.path.abspath(path))
+        drive, tail = os.path.splitdrive(normalized)
+        root = drive + os.sep if drive else os.sep
+        rel_tail = tail[len(os.sep):] if tail.startswith(os.sep) else tail
+        parts = [part for part in rel_tail.split(os.sep) if part]
+
+        current = root
+        for part in parts:
+            exact = os.path.join(current, part)
+            if os.path.exists(exact):
+                current = exact
+                continue
+
+            try:
+                entries = os.listdir(current)
+            except OSError:
+                return None
+
+            matches = [name for name in entries if name.rstrip() == part.rstrip()]
+            if not matches:
+                return None
+
+            matches.sort()
+            current = os.path.join(current, matches[0])
+
+        return current
+
     add_candidate(segment_dir)
     add_candidate(os.path.join(PROJECT_DIR, segment_dir))
     add_candidate(os.path.join(ALPAMAYO_DIR, segment_dir))
@@ -106,6 +135,9 @@ def _resolve_segment_dir(segment_dir: str) -> str:
     for candidate in candidates:
         if os.path.isdir(os.path.join(candidate, "telemetry")):
             return candidate
+        trimmed_candidate = resolve_with_trimmed_components(candidate)
+        if trimmed_candidate and os.path.isdir(os.path.join(trimmed_candidate, "telemetry")):
+            return trimmed_candidate
 
     return candidates[0]
 
