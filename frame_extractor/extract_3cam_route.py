@@ -8,10 +8,10 @@ This script supports two alignment strategies:
 
 Examples:
   python extract_3cam_route.py
-  python extract_3cam_route.py --sync-mode index --sync-offset 23
-  python extract_3cam_route.py --sync-mode telemetry --route-sync-frame 86 --video-sync-frame 63
-  python extract_3cam_route.py --sync-mode telemetry --route-sync-frame 86 --video-sync-frame 63 \
+  python extract_3cam_route.py --sync-mode telemetry --route-sync-frame 76 --video-sync-frame 198
+  python extract_3cam_route.py --sync-mode telemetry --route-sync-frame 76 --video-sync-frame 198 \
       --route-sync-frame-2 1500 --video-sync-frame-2 4960
+  python extract_3cam_route.py --sync-mode index --sync-offset 13
   python extract_3cam_route.py --dry-run
 """
 
@@ -340,14 +340,14 @@ def main() -> None:
     parser.add_argument(
         "--sync-mode",
         choices=("index", "telemetry"),
-        default="index",
-        help="Alignment mode to use (default: index)",
+        default="telemetry",
+        help="Alignment mode to use (default: telemetry)",
     )
     parser.add_argument(
         "--sync-offset",
         type=int,
-        default=23,
-        help="Leading black frames for index mode (default: 23)",
+        default=13,
+        help="Leading black frames for index mode (default: 13)",
     )
     parser.add_argument(
         "--source-start-frame",
@@ -364,14 +364,14 @@ def main() -> None:
     parser.add_argument(
         "--route-sync-frame",
         type=int,
-        default=86,
-        help="Global route frame index for the primary sync anchor (default: 86)",
+        default=76,
+        help="Global route frame index for the primary sync anchor (default: 76)",
     )
     parser.add_argument(
         "--video-sync-frame",
         type=int,
-        default=63,
-        help="Video frame index for the primary sync anchor (default: 63)",
+        default=198,
+        help="Video frame index for the primary sync anchor (default: 198)",
     )
     parser.add_argument(
         "--route-sync-frame-2",
