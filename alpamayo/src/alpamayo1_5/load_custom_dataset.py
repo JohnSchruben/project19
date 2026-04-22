@@ -18,6 +18,8 @@ CAMERA_DIRS = [
     ("raw_front", 6),  # front-tele
 ]
 
+ROUTE_CONTEXT_CACHE: dict[str, dict] = {}
+
 
 def _timestamp_seconds(data: dict) -> float:
     """Return telemetry timestamp in seconds."""
@@ -74,6 +76,83 @@ def _load_telemetry_series(telemetry_dir: str) -> tuple[np.ndarray, np.ndarray, 
         raise RuntimeError("Telemetry timestamps are not monotonic")
 
     return timestamps_s, speeds_m_s, yaw_rates_rad_s
+
+
+def _discover_route_segments(segment_dir: str) -> tuple[list[str], str]:
+    """Return the ordered segment directories for a route and a stable cache key."""
+    abs_segment_dir = os.path.abspath(segment_dir)
+    segment_name = os.path.basename(abs_segment_dir)
+    parent_dir = os.path.dirname(abs_segment_dir)
+
+    if not segment_name.startswith("segment_"):
+        return [abs_segment_dir], abs_segment_dir
+
+    segment_dirs = [
+        os.path.join(parent_dir, name)
+        for name in sorted(os.listdir(parent_dir))
+        if name.startswith("segment_") and os.path.isdir(os.path.join(parent_dir, name))
+    ]
+    segment_dirs = [os.path.abspath(path) for path in segment_dirs]
+
+    if abs_segment_dir not in segment_dirs:
+        return [abs_segment_dir], abs_segment_dir
+
+    return segment_dirs, parent_dir
+
+
+def _load_route_context(segment_dir: str) -> dict:
+    """Load and cache route-wide telemetry so GT can cross segment boundaries."""
+    segment_dirs, cache_key = _discover_route_segments(segment_dir)
+    cached = ROUTE_CONTEXT_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
+    timestamps_parts = []
+    speeds_parts = []
+    yaw_rates_parts = []
+    frame_records: list[tuple[str, int]] = []
+    segment_start_indices: dict[str, int] = {}
+
+    for seg_dir in segment_dirs:
+        telemetry_dir = os.path.join(seg_dir, "telemetry")
+        if not os.path.isdir(telemetry_dir):
+            continue
+
+        timestamps_s, speeds_m_s, yaw_rates_rad_s = _load_telemetry_series(telemetry_dir)
+        if timestamps_s.size == 0:
+            continue
+
+        segment_start_indices[seg_dir] = len(frame_records)
+        frame_records.extend((seg_dir, local_idx) for local_idx in range(len(timestamps_s)))
+        timestamps_parts.append(timestamps_s)
+        speeds_parts.append(speeds_m_s)
+        yaw_rates_parts.append(yaw_rates_rad_s)
+
+    if not timestamps_parts:
+        raise FileNotFoundError(f"No telemetry json files found for route context rooted at {segment_dir}")
+
+    timestamps_s = np.concatenate(timestamps_parts)
+    speeds_m_s = np.concatenate(speeds_parts)
+    yaw_rates_rad_s = np.concatenate(yaw_rates_parts)
+
+    if np.any(np.diff(timestamps_s) < 0):
+        raise RuntimeError("Route telemetry timestamps are not monotonic")
+
+    absolute_xyz, absolute_theta = _integrate_segment_pose(
+        timestamps_s,
+        speeds_m_s,
+        yaw_rates_rad_s,
+    )
+
+    context = {
+        "timestamps_s": timestamps_s,
+        "absolute_xyz": absolute_xyz,
+        "absolute_theta": absolute_theta,
+        "frame_records": frame_records,
+        "segment_start_indices": segment_start_indices,
+    }
+    ROUTE_CONTEXT_CACHE[cache_key] = context
+    return context
 
 
 def _integrate_segment_pose(
@@ -172,32 +251,38 @@ def load_custom_dataset(
     Load a route segment and resample kinematics to Alpamayo's expected 10Hz layout.
 
     The synced route folders are not guaranteed to be 20Hz openpilot frame sequences,
-    so we use telemetry timestamps to reconstruct a continuous local trajectory and
-    then sample:
+    so we use route telemetry timestamps to reconstruct a continuous local trajectory
+    across neighboring segment_* folders when available, then sample:
       - history at [..., t0-0.2, t0-0.1, t0]
       - future at [t0+0.1, ..., t0+6.4]
     """
     del frame_stride, visual_stride  # Kept in the signature for notebook compatibility.
 
+    abs_segment_dir = os.path.abspath(segment_dir)
     telemetry_dir = os.path.join(segment_dir, "telemetry")
 
     if not os.path.isdir(telemetry_dir):
         raise FileNotFoundError(f"Telemetry directory not found: {telemetry_dir}")
 
-    timestamps_s, speeds_m_s, yaw_rates_rad_s = _load_telemetry_series(telemetry_dir)
-    if frame_idx < 0 or frame_idx >= len(timestamps_s):
+    route_context = _load_route_context(segment_dir)
+    segment_start_indices = route_context["segment_start_indices"]
+    if abs_segment_dir not in segment_start_indices:
+        raise RuntimeError(f"Segment {segment_dir} is missing from the route telemetry context")
+
+    local_timestamps_s, _, _ = _load_telemetry_series(telemetry_dir)
+    if frame_idx < 0 or frame_idx >= len(local_timestamps_s):
         raise IndexError(
             f"frame_idx {frame_idx} is out of range for {segment_dir} "
-            f"(0..{len(timestamps_s) - 1})"
+            f"(0..{len(local_timestamps_s) - 1})"
         )
 
-    absolute_xyz, absolute_theta = _integrate_segment_pose(
-        timestamps_s,
-        speeds_m_s,
-        yaw_rates_rad_s,
-    )
+    timestamps_s = route_context["timestamps_s"]
+    absolute_xyz = route_context["absolute_xyz"]
+    absolute_theta = route_context["absolute_theta"]
+    frame_records = route_context["frame_records"]
+    global_frame_idx = segment_start_indices[abs_segment_dir] + frame_idx
 
-    t0_s = float(timestamps_s[frame_idx])
+    t0_s = float(timestamps_s[global_frame_idx])
     history_offsets_s = np.arange(
         -(num_history_steps - 1) * time_step,
         0.5 * time_step,
@@ -265,7 +350,8 @@ def load_custom_dataset(
 
         images = []
         for idx in image_indices:
-            img_path = os.path.join(cam_dir, f"{int(idx):06d}.png")
+            image_segment_dir, image_local_idx = frame_records[int(idx)]
+            img_path = os.path.join(image_segment_dir, dir_name, f"{image_local_idx:06d}.png")
             if os.path.exists(img_path):
                 img = Image.open(img_path).convert("RGB")
                 img = ImageOps.pad(img, (640, 480), method=Image.Resampling.BILINEAR)
@@ -306,7 +392,7 @@ def load_custom_dataset(
         "relative_timestamps": relative_timestamps,
         "absolute_timestamps": absolute_timestamps,
         "t0_us": int(round(t0_s * 1_000_000.0)),
-        "clip_id": f"custom_segment_frame_{frame_idx}",
+        "clip_id": f"custom_{os.path.basename(abs_segment_dir)}_frame_{frame_idx}",
     }
 
 
