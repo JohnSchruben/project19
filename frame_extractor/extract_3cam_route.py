@@ -11,6 +11,7 @@ Examples:
   python extract_3cam_route.py --sync-mode telemetry --route-sync-frame 76 --video-sync-frame 198
   python extract_3cam_route.py --sync-mode telemetry --route-sync-frame 76 --video-sync-frame 198 \
       --route-sync-frame-2 1500 --video-sync-frame-2 4960
+  python extract_3cam_route.py --video-time-offset 0.5
   python extract_3cam_route.py --sync-mode index --sync-offset 13
   python extract_3cam_route.py --dry-run
 """
@@ -223,6 +224,7 @@ def build_video_frame_map(
     video_anchor_frame_1: int,
     route_anchor_time_2: Optional[float] = None,
     video_anchor_frame_2: Optional[int] = None,
+    video_time_offset: float = 0.0,
 ) -> Tuple[List[Optional[int]], int, float, float]:
     """
     Map each route frame time to a video frame index.
@@ -249,7 +251,11 @@ def build_video_frame_map(
     black_frames = 0
 
     for route_time in route_times:
-        video_time = video_anchor_time_1 + (route_time - route_anchor_time_1) * time_scale
+        video_time = (
+            video_anchor_time_1
+            + (route_time - route_anchor_time_1) * time_scale
+            + video_time_offset
+        )
 
         if video_time < 0.0 or video_time > max_video_time:
             frame_indices.append(None)
@@ -260,7 +266,9 @@ def build_video_frame_map(
         frame_idx = min(max(frame_idx, 0), video_total_frames - 1)
         frame_indices.append(frame_idx)
 
-    video_time_at_route_start = video_anchor_time_1 - (route_anchor_time_1 * time_scale)
+    video_time_at_route_start = (
+        video_anchor_time_1 - (route_anchor_time_1 * time_scale) + video_time_offset
+    )
     return frame_indices, black_frames, time_scale, video_time_at_route_start
 
 
@@ -270,6 +278,7 @@ def build_index_frame_map(
     sync_offset: int,
     source_start_frame: int,
     source_end_frame: Optional[int],
+    frame_offset: int = 0,
 ) -> Tuple[List[Optional[int]], int, int, int, float]:
     """
     Map route frame indices directly onto a source-video frame window.
@@ -310,8 +319,16 @@ def build_index_frame_map(
         active_frames,
         dtype=int,
     ).tolist()
+    sampled = [
+        idx + frame_offset if 0 <= idx + frame_offset < video_total_frames else None
+        for idx in sampled
+    ]
     average_step = 0.0 if active_frames <= 1 else (source_end_frame - source_start_frame) / (active_frames - 1)
-    return ([None] * sync_offset) + sampled, sync_offset, source_start_frame, source_end_frame, average_step
+    black_frames = sync_offset + sum(1 for idx in sampled if idx is None)
+    first_used_candidates = [idx for idx in sampled if idx is not None]
+    first_used = min(first_used_candidates) if first_used_candidates else source_start_frame
+    last_used = max(first_used_candidates) if first_used_candidates else source_end_frame
+    return ([None] * sync_offset) + sampled, black_frames, first_used, last_used, average_step
 
 
 def clear_output_frames(directory: str) -> int:
@@ -392,6 +409,16 @@ def main() -> None:
         help="Use a fixed route frame rate when telemetry is unavailable",
     )
     parser.add_argument(
+        "--video-time-offset",
+        type=float,
+        default=0.5,
+        help=(
+            "Seconds to add to the source MP4 time before extraction. Positive values "
+            "sample later MP4 frames and correct extracted cameras that lag the openpilot "
+            "camera. Use 0 to disable. Default: 0.5"
+        ),
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Preview the sync mapping without writing files",
@@ -417,6 +444,7 @@ def main() -> None:
     )
     print(f"Total route frames: {total_frames}")
     print(f"Sync mode: {args.sync_mode}")
+    print(f"Video time offset: {args.video_time_offset:+.3f} s")
 
     video_paths: Dict[str, str] = {}
     video_infos: Dict[str, Tuple[int, float, int, int]] = {}
@@ -481,6 +509,7 @@ def main() -> None:
                 video_anchor_frame_1=args.video_sync_frame,
                 route_anchor_time_2=route_anchor_time_2,
                 video_anchor_frame_2=args.video_sync_frame_2,
+                video_time_offset=args.video_time_offset,
             )
             mapping_by_camera[prefix] = frame_map
 
@@ -506,17 +535,20 @@ def main() -> None:
 
         for prefix, dir_name in CAMERAS:
             total, fps, _, _ = video_infos[prefix]
+            frame_offset = int(round(args.video_time_offset * fps))
             frame_map, black_count, first_used, last_used, average_step = build_index_frame_map(
                 total_route_frames=total_frames,
                 video_total_frames=total,
                 sync_offset=args.sync_offset,
                 source_start_frame=args.source_start_frame,
                 source_end_frame=args.source_end_frame,
+                frame_offset=frame_offset,
             )
             mapping_by_camera[prefix] = frame_map
 
             unique_used = len({idx for idx in frame_map if idx is not None})
             print(f"\n{prefix} -> {dir_name}:")
+            print(f"  frame offset from --video-time-offset: {frame_offset:+d} frames")
             print(
                 f"  black frames required: {black_count}, "
                 f"average source step: {average_step:.3f}"
