@@ -42,8 +42,6 @@ parser.add_argument("--output-fps", type=float, default=40.0,
                     help="Output video frame rate (default: 40.0).")
 parser.add_argument("--plot-all-samples", action="store_true",
                     help="Plot all trajectory samples instead of just the selected best path")
-parser.add_argument("--save-prediction-json", action="store_true",
-                    help="Save one Alpamayo prediction JSON file per processed frame")
 parser.add_argument("--prediction-json-dir", type=str, default=None,
                     help="Optional JSON output directory. Default: <segment>/predictions")
 global_args = parser.parse_args()
@@ -530,23 +528,22 @@ def main():
                         f"Representative Reasoning: \033[38;2;255;165;0m{cot}\033[0m"
                     )
 
-                if args.save_prediction_json:
-                    json_path = save_prediction_json(
-                        args=args,
-                        route_name=route_name,
-                        seg_name=seg_name,
-                        seg_dir=seg_dir,
-                        local_idx=local_idx,
-                        nav_cmd=nav_cmd,
-                        cmd_text=cmd_text,
-                        cot=cot,
-                        sample_idx=sample_idx,
-                        selected_path=selected_path,
-                        gt_xyz=gt_xyz,
-                        n_frames=selected_frames,
-                        data=data,
-                    )
-                    print(f"Saved prediction JSON: {json_path}")
+                json_path = save_prediction_json(
+                    args=args,
+                    route_name=route_name,
+                    seg_name=seg_name,
+                    seg_dir=seg_dir,
+                    local_idx=local_idx,
+                    nav_cmd=nav_cmd,
+                    cmd_text=cmd_text,
+                    cot=cot,
+                    sample_idx=sample_idx,
+                    selected_path=selected_path,
+                    gt_xyz=gt_xyz,
+                    n_frames=selected_frames,
+                    data=data,
+                )
+                print(f"Saved prediction JSON: {json_path}")
                 
                 if args.plot_all_samples:
                     pred_np = pred_xyz.detach().cpu().numpy()[0, 0]
