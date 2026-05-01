@@ -2,6 +2,7 @@ import os
 import sys
 import glob
 import argparse
+import json
 
 def get_default_route():
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'datasets'))
@@ -41,6 +42,10 @@ parser.add_argument("--output-fps", type=float, default=40.0,
                     help="Output video frame rate (default: 40.0).")
 parser.add_argument("--plot-all-samples", action="store_true",
                     help="Plot all trajectory samples instead of just the selected best path")
+parser.add_argument("--save-prediction-json", action="store_true",
+                    help="Save one Alpamayo prediction JSON file per processed frame")
+parser.add_argument("--prediction-json-dir", type=str, default=None,
+                    help="Optional JSON output directory. Default: <segment>/predictions")
 global_args = parser.parse_args()
 
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
@@ -157,9 +162,26 @@ def select_prediction_xy(
     num_frames: int,
     selection_mode: str = "heuristic",
 ) -> tuple[np.ndarray, np.ndarray, int, int]:
+    selected, n_frames, sample_idx, _ = select_prediction_path(
+        pred_tensor,
+        nav_cmd,
+        num_frames,
+        selection_mode=selection_mode,
+    )
+    pred_x = np.concatenate(([0.0], selected[:n_frames, 0]))
+    pred_y = np.concatenate(([0.0], selected[:n_frames, 1]))
+    return pred_x, pred_y, n_frames, sample_idx
+
+
+def select_prediction_path(
+    pred_tensor,
+    nav_cmd: str,
+    num_frames: int,
+    selection_mode: str = "heuristic",
+) -> tuple[np.ndarray, int, int, np.ndarray]:
     pred_np = pred_tensor.detach().cpu().numpy()[0, 0]
     if pred_np.shape[0] == 0:
-        return np.array([0.0]), np.array([0.0]), 0, 0
+        return np.zeros((1, 3), dtype=np.float32), 0, 0, pred_np
 
     if selection_mode == "mean":
         selected = pred_np.mean(axis=0)
@@ -193,13 +215,90 @@ def select_prediction_xy(
         selected = pred_np[sample_idx]
 
     n_frames = min(num_frames, selected.shape[0])
-    pred_x = np.concatenate(([0.0], selected[:n_frames, 0]))
-    pred_y = np.concatenate(([0.0], selected[:n_frames, 1]))
-    return pred_x, pred_y, n_frames, sample_idx
+    return selected[:n_frames], n_frames, sample_idx, pred_np
 
 
 def plot_dotted_path(ax, xs: np.ndarray, ys: np.ndarray, color: str, label: str):
     ax.plot([-y for y in ys], xs, marker='o', color=color, linewidth=2.0, label=label)
+
+
+def path_to_records(path: np.ndarray) -> list[dict]:
+    records = []
+    for idx, point in enumerate(path):
+        records.append(
+            {
+                "step_index": int(idx),
+                "x_m": float(point[0]),
+                "y_m": float(point[1]),
+                "z_m": float(point[2]) if len(point) > 2 else 0.0,
+            }
+        )
+    return records
+
+
+def samples_to_records(samples: np.ndarray, num_frames: int) -> list[dict]:
+    return [
+        {
+            "sample_index": int(sample_idx),
+            "path": path_to_records(sample[:num_frames]),
+        }
+        for sample_idx, sample in enumerate(samples)
+    ]
+
+
+def prediction_json_dir(args, seg_dir: str) -> str:
+    if args.prediction_json_dir:
+        return os.path.abspath(args.prediction_json_dir)
+    return os.path.join(seg_dir, "predictions")
+
+
+def save_prediction_json(
+    args,
+    route_name: str,
+    seg_name: str,
+    seg_dir: str,
+    local_idx: int,
+    nav_cmd: str,
+    cmd_text: str,
+    cot: str,
+    sample_idx: int,
+    selected_path: np.ndarray,
+    gt_xyz: np.ndarray,
+    n_frames: int,
+    data: dict,
+) -> str:
+    out_dir = prediction_json_dir(args, seg_dir)
+    os.makedirs(out_dir, exist_ok=True)
+    out_path = os.path.join(out_dir, f"{seg_name}_{local_idx:06d}_prediction.json")
+
+    payload = {
+        "schema_version": 1,
+        "model_name": "nvidia/Alpamayo-1.5-10B",
+        "route": route_name,
+        "segment": seg_name,
+        "frame_index": int(local_idx),
+        "clip_id": data.get("clip_id"),
+        "t0_us": data.get("t0_us"),
+        "nav_command": nav_cmd,
+        "command_text": cmd_text,
+        "command_source": "fixed" if args.command else "ground_truth_heuristic",
+        "selection_mode": args.selection_mode,
+        "selected_sample_index": int(sample_idx),
+        "num_traj_samples": int(args.num_traj_samples),
+        "guidance_weight": float(args.guidance_weight),
+        "max_generation_length": int(args.max_gen_length),
+        "frames_requested": int(args.frames),
+        "frames_stored": int(n_frames),
+        "cameras": args.cameras,
+        "reasoning": cot,
+        "selected_path": path_to_records(selected_path),
+        "ground_truth_path": path_to_records(gt_xyz[:n_frames]),
+    }
+
+    with open(out_path, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle, indent=2)
+
+    return out_path
 
 
 def main():
@@ -411,6 +510,12 @@ def main():
                     args.frames,
                     selection_mode=args.selection_mode,
                 )
+                selected_path, selected_frames, _, _ = select_prediction_path(
+                    pred_xyz,
+                    cmd_text,
+                    args.frames,
+                    selection_mode=args.selection_mode,
+                )
                 
                 cot = extract_cot(extra, sample_idx)
                 if args.selection_mode == "heuristic":
@@ -424,6 +529,24 @@ def main():
                         f"Display Path: \033[96m{args.selection_mode}\033[0m | "
                         f"Representative Reasoning: \033[38;2;255;165;0m{cot}\033[0m"
                     )
+
+                if args.save_prediction_json:
+                    json_path = save_prediction_json(
+                        args=args,
+                        route_name=route_name,
+                        seg_name=seg_name,
+                        seg_dir=seg_dir,
+                        local_idx=local_idx,
+                        nav_cmd=nav_cmd,
+                        cmd_text=cmd_text,
+                        cot=cot,
+                        sample_idx=sample_idx,
+                        selected_path=selected_path,
+                        gt_xyz=gt_xyz,
+                        n_frames=selected_frames,
+                        data=data,
+                    )
+                    print(f"Saved prediction JSON: {json_path}")
                 
                 if args.plot_all_samples:
                     pred_np = pred_xyz.detach().cpu().numpy()[0, 0]
