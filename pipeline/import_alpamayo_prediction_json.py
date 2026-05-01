@@ -193,7 +193,8 @@ def main():
 
     prediction_paths = sorted(glob.glob(str(predictions_dir / "*_prediction.json")))
     if not prediction_paths:
-        raise SystemExit(f"No *_prediction.json files found in {predictions_dir}")
+        print(f"[SKIP] No *_prediction.json files found in {predictions_dir}")
+        return
 
     conn = connect_db(args.db)
     imported = 0
