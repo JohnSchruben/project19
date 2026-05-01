@@ -4,15 +4,15 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  ./build-db.sh [options] <route-folder-or-segment-folder>
+  ./run_full_pipeline.sh [options] <route-folder-or-segment-folder>
 
 Examples:
-  ./build-db.sh datasets/route_1
-  ./build-db.sh datasets/route_1/segment_00
-  ./build-db.sh --openpilot-route "d34c14daa88a1e86/000000ca--7c5d326170" datasets/route_1
+  ./run_full_pipeline.sh datasets/route_1
+  ./run_full_pipeline.sh datasets/route_1/segment_00
+  ./run_full_pipeline.sh --openpilot-route "d34c14daa88a1e86/000000ca--7c5d326170" datasets/route_1
 
 Options:
-  --openpilot-route ROUTE_ID   Run run_pipeline.py first and write data into the route folder.
+  --openpilot-route ROUTE_ID   Run route_caputure.py first and write data into the route folder.
   --num-traj-samples N         Alpamayo trajectory samples per frame. Default: 1.
   --help                       Show this help.
 EOF
@@ -140,7 +140,7 @@ if [[ -n "$OPENPILOT_ROUTE" ]]; then
     DATASET_DIR="$(dirname "$TARGET")"
   fi
   echo "[INFO] Running route capture into $DATASET_DIR"
-  "$HOST_PYTHON" run_pipeline.py --route "$OPENPILOT_ROUTE" --dataset-dir "$DATASET_DIR"
+  "$HOST_PYTHON" route_caputure.py --route "$OPENPILOT_ROUTE" --dataset-dir "$DATASET_DIR"
 fi
 
 if [[ ! -d "$TARGET" ]]; then
@@ -179,7 +179,7 @@ echo "[INFO] Installing local annotation dependencies"
 
 echo "[INFO] Running local YOLO annotation"
 for seg in "${SEGMENTS[@]}"; do
-  "$HOST_PYTHON" CVAT_setup/scripts/local_yolo_annotate.py "$seg"
+  "$HOST_PYTHON" annotate.py "$seg"
 done
 
 echo "[INFO] Preparing Alpamayo environment"
@@ -207,14 +207,7 @@ echo "[INFO] Preparing Alpamayo environment"
   deactivate
 )
 
-echo "[INFO] Importing annotations into pipeline DB"
-for seg in "${SEGMENTS[@]}"; do
-  "$HOST_PYTHON" pipeline/import_route_annotations.py "$seg"
-done
-
-echo "[INFO] Importing Alpamayo predictions into pipeline DB"
-for seg in "${SEGMENTS[@]}"; do
-  "$HOST_PYTHON" pipeline/import_alpamayo_prediction_json.py "$seg" --overwrite
-done
+echo "[INFO] Importing annotations and Alpamayo predictions into pipeline DB"
+"$HOST_PYTHON" import.py "$TARGET_ABS" --overwrite
 
 echo "[SUCCESS] Built pipeline/annotations.db"
