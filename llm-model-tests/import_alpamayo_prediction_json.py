@@ -3,13 +3,10 @@
 Import Alpamayo per-frame prediction JSON files into annotations.db.
 
 This pairs with:
-  alpamayo/batch_export_inference.py --save-prediction-json
+  alpamayo/batch_export_inference.py
 
 Example:
-  python3 llm-model-tests/import_alpamayo_prediction_json.py \
-    --db llm-model-tests/annotations.db \
-    --predictions-dir datasets/route_3/segment_00/predictions/json \
-    --source route_3_segment_00
+  python3 llm-model-tests/import_alpamayo_prediction_json.py datasets/route_3/segment_00
 """
 
 from __future__ import annotations
@@ -23,12 +20,13 @@ from pathlib import Path
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Import Alpamayo prediction JSON into SQLite.")
+    parser.add_argument("segment", help="Segment folder, e.g. datasets/route_3/segment_00")
     parser.add_argument("--db", default="llm-model-tests/annotations.db")
-    parser.add_argument("--predictions-dir", required=True)
+    parser.add_argument("--predictions-dir", default=None, help="Optional predictions folder override")
     parser.add_argument(
         "--source",
         default=None,
-        help="Frame source in DB. Default is inferred as <route>_<segment> from JSON.",
+        help="Optional frame source override. Default is inferred as <route>_<segment>.",
     )
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
@@ -99,6 +97,15 @@ def infer_source(payload):
     if route and segment:
         return f"{route}_{segment}"
     return None
+
+
+def infer_source_from_segment(segment_path):
+    segment_path = Path(segment_path).resolve()
+    return f"{segment_path.parent.name}_{segment_path.name}"
+
+
+def infer_predictions_dir(segment_path):
+    return Path(segment_path).resolve() / "predictions"
 
 
 def find_frame(conn, source, frame_index):
@@ -181,18 +188,23 @@ def insert_prediction(conn, frame_row, payload):
 
 def main():
     args = parse_args()
-    prediction_paths = sorted(glob.glob(str(Path(args.predictions_dir) / "*_prediction.json")))
+    predictions_dir = Path(args.predictions_dir).resolve() if args.predictions_dir else infer_predictions_dir(args.segment)
+    default_source = args.source or infer_source_from_segment(args.segment)
+
+    prediction_paths = sorted(glob.glob(str(predictions_dir / "*_prediction.json")))
     if not prediction_paths:
-        raise SystemExit(f"No *_prediction.json files found in {args.predictions_dir}")
+        raise SystemExit(f"No *_prediction.json files found in {predictions_dir}")
 
     conn = connect_db(args.db)
     imported = 0
     skipped = 0
 
     print(f"Found {len(prediction_paths)} prediction JSON file(s).")
+    print(f"Predictions: {predictions_dir}")
+    print(f"Source     : {default_source}")
     for json_path in prediction_paths:
         payload = load_prediction(json_path)
-        source = args.source or infer_source(payload)
+        source = args.source or infer_source(payload) or default_source
         frame_index = payload.get("frame_index")
 
         if source is None or frame_index is None:
