@@ -61,9 +61,43 @@ fi
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$PROJECT_ROOT"
 
+pick_host_python() {
+  local venv_bin=""
+  if [[ -n "${VIRTUAL_ENV:-}" ]]; then
+    venv_bin="$(cd "$VIRTUAL_ENV/bin" 2>/dev/null && pwd || true)"
+  fi
+
+  local path_dir candidate resolved
+  IFS=':' read -r -a path_dirs <<< "$PATH"
+  for path_dir in "${path_dirs[@]}"; do
+    [[ -z "$path_dir" ]] && continue
+    resolved="$(cd "$path_dir" 2>/dev/null && pwd || true)"
+    [[ -z "$resolved" ]] && continue
+    [[ -n "$venv_bin" && "$resolved" == "$venv_bin" ]] && continue
+    [[ "$resolved" == "$PROJECT_ROOT/alpamayo/a1_5_venv/bin" ]] && continue
+
+    candidate="$resolved/python3"
+    if [[ -x "$candidate" ]] && "$candidate" -m pip --version >/dev/null 2>&1; then
+      echo "$candidate"
+      return 0
+    fi
+
+    candidate="$resolved/python"
+    if [[ -x "$candidate" ]] && "$candidate" -m pip --version >/dev/null 2>&1; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+
+  echo "python3"
+}
+
+HOST_PYTHON="$(pick_host_python)"
+echo "[INFO] Host Python: $HOST_PYTHON"
+
 reset_pipeline_db() {
   echo "[INFO] Resetting pipeline/annotations.db"
-  python3 - <<'PY'
+  "$HOST_PYTHON" - <<'PY'
 import sqlite3
 from pathlib import Path
 
@@ -81,7 +115,7 @@ PY
 }
 
 real_path() {
-  python3 - "$1" <<'PY'
+  "$HOST_PYTHON" - "$1" <<'PY'
 from pathlib import Path
 import sys
 print(Path(sys.argv[1]).expanduser().resolve())
@@ -89,7 +123,7 @@ PY
 }
 
 relative_from_alpamayo() {
-  PROJECT_ROOT="$PROJECT_ROOT" python3 - "$1" <<'PY'
+  PROJECT_ROOT="$PROJECT_ROOT" "$HOST_PYTHON" - "$1" <<'PY'
 from pathlib import Path
 import os
 import sys
@@ -106,7 +140,7 @@ if [[ -n "$OPENPILOT_ROUTE" ]]; then
     DATASET_DIR="$(dirname "$TARGET")"
   fi
   echo "[INFO] Running route capture into $DATASET_DIR"
-  python3 run_pipeline.py --route "$OPENPILOT_ROUTE" --dataset-dir "$DATASET_DIR"
+  "$HOST_PYTHON" run_pipeline.py --route "$OPENPILOT_ROUTE" --dataset-dir "$DATASET_DIR"
 fi
 
 if [[ ! -d "$TARGET" ]]; then
@@ -141,11 +175,11 @@ done
 reset_pipeline_db
 
 echo "[INFO] Installing local annotation dependencies"
-python3 -m pip install ultralytics pillow
+"$HOST_PYTHON" -m pip install ultralytics pillow
 
 echo "[INFO] Running local YOLO annotation"
 for seg in "${SEGMENTS[@]}"; do
-  python3 CVAT_setup/scripts/local_yolo_annotate.py "$seg"
+  "$HOST_PYTHON" CVAT_setup/scripts/local_yolo_annotate.py "$seg"
 done
 
 echo "[INFO] Preparing Alpamayo environment"
@@ -171,12 +205,12 @@ echo "[INFO] Preparing Alpamayo environment"
 
 echo "[INFO] Importing annotations into pipeline DB"
 for seg in "${SEGMENTS[@]}"; do
-  python3 pipeline/import_route_annotations.py "$seg"
+  "$HOST_PYTHON" pipeline/import_route_annotations.py "$seg"
 done
 
 echo "[INFO] Importing Alpamayo predictions into pipeline DB"
 for seg in "${SEGMENTS[@]}"; do
-  python3 pipeline/import_alpamayo_prediction_json.py "$seg" --overwrite
+  "$HOST_PYTHON" pipeline/import_alpamayo_prediction_json.py "$seg" --overwrite
 done
 
 echo "[SUCCESS] Built pipeline/annotations.db"
