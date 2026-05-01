@@ -8,12 +8,7 @@ aspave/CVAT-era importer.
 Typical usage from /workspace/project19:
 
   python3 llm-model-tests/import_route_annotations.py \
-    --frames-dir datasets/route_3/segment_00 \
-    --db llm-model-tests/annotations.db \
-    --source route_3_segment_00 \
-    --yolo-labels-dir datasets/route_3/segment_00/local_yolo_annotations \
-    --classes-file datasets/route_3/segment_00/local_yolo_annotations/classes.txt \
-    --create-placeholder-annotations
+    datasets/route_3/segment_00
 
 The existing DB schema stores high-level label categories, not bounding boxes.
 This script converts YOLO boxes into "present" booleans per frame.
@@ -42,9 +37,10 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="Import route frames and optional local YOLO labels into annotations.db"
     )
-    parser.add_argument("--frames-dir", required=True, help="Image folder or segment folder containing raw camera folders")
+    parser.add_argument("segment", help="Segment folder, e.g. datasets/route_3/segment_00")
+    parser.add_argument("--frames-dir", default=None, help="Optional image folder override")
     parser.add_argument("--db", default="llm-model-tests/annotations.db", help="SQLite DB path")
-    parser.add_argument("--source", required=True, help="Source name, e.g. route_3_segment_00")
+    parser.add_argument("--source", default=None, help="Optional source name override")
     parser.add_argument(
         "--annotations-json",
         default=None,
@@ -127,6 +123,24 @@ def discover_image_sets(frames_dir):
             f"No images found in {input_path} or camera folders: {', '.join(CAMERA_DIRS)}"
         )
     return input_path, image_sets, True
+
+
+def infer_base_source(segment_path):
+    path = Path(segment_path).resolve()
+    if path.name.startswith("raw"):
+        segment = path.parent.name
+        route = path.parent.parent.name
+    else:
+        segment = path.name
+        route = path.parent.name
+    return f"{route}_{segment}"
+
+
+def infer_yolo_labels_dir(segment_path):
+    path = Path(segment_path).resolve()
+    segment_dir = path.parent if path.name in CAMERA_DIRS else path
+    candidate = segment_dir / "local_yolo_annotations"
+    return str(candidate) if candidate.exists() else None
 
 
 def source_for_camera(base_source, camera_name, multi_camera):
@@ -282,12 +296,15 @@ def create_annotation_for_frame(db, frame_id, entry, args, yolo_presence):
 
 def main():
     args = parse_args()
+    frames_dir = args.frames_dir or args.segment
+    source = args.source or infer_base_source(frames_dir)
+    yolo_labels_dir = args.yolo_labels_dir or infer_yolo_labels_dir(frames_dir)
 
-    classes_file = resolve_classes_file(args.classes_file, args.yolo_labels_dir)
-    if args.yolo_labels_dir and not classes_file:
-        raise SystemExit("--classes-file is required when --yolo-labels-dir is used")
+    classes_file = resolve_classes_file(args.classes_file, yolo_labels_dir)
+    if yolo_labels_dir and not classes_file:
+        raise SystemExit(f"Could not find classes.txt under {yolo_labels_dir}")
 
-    base_dir, image_sets, multi_camera = discover_image_sets(args.frames_dir)
+    base_dir, image_sets, multi_camera = discover_image_sets(frames_dir)
     classes = load_classes(classes_file)
     annotation_entries = load_annotation_json(args.annotations_json)
     total_images = sum(len(images) for _, _, images in image_sets)
@@ -297,9 +314,9 @@ def main():
     print("=" * 60)
     print(f"Database   : {args.db}")
     print(f"Frames dir : {base_dir}")
-    print(f"Source     : {args.source}")
-    if args.yolo_labels_dir:
-        print(f"YOLO labels: {Path(args.yolo_labels_dir).resolve()}")
+    print(f"Source     : {source}")
+    if yolo_labels_dir:
+        print(f"YOLO labels: {Path(yolo_labels_dir).resolve()}")
     if args.annotations_json:
         print(f"JSON labels: {Path(args.annotations_json).resolve()}")
     if args.dry_run:
@@ -311,7 +328,7 @@ def main():
     with DatasetManager(args.db) as db:
         print("\n--- Registering frames ---")
         for camera_name, _, images in image_sets:
-            camera_source = source_for_camera(args.source, camera_name, multi_camera)
+            camera_source = source_for_camera(source, camera_name, multi_camera)
             print(f"\nCamera {camera_name} -> source {camera_source}")
             frame_map = import_frames(
                 db=db,
@@ -323,11 +340,11 @@ def main():
 
             should_create_annotations = (
                 bool(annotation_entries)
-                or bool(args.yolo_labels_dir and args.create_placeholder_annotations)
+                or bool(yolo_labels_dir)
             )
 
             if should_create_annotations:
-                labels_dir = resolve_yolo_labels_dir(args.yolo_labels_dir, camera_name, multi_camera)
+                labels_dir = resolve_yolo_labels_dir(yolo_labels_dir, camera_name, multi_camera)
                 print(f"--- Importing annotations for {camera_name} ---")
                 for image_path in images:
                     entry = annotation_entries.get(image_path.name)
