@@ -185,7 +185,11 @@ done
 echo "[INFO] Preparing Alpamayo environment"
 (
   cd alpamayo
-  uv venv a1_5_venv
+  if [[ -f a1_5_venv/bin/activate ]]; then
+    echo "[INFO] Reusing existing Alpamayo venv: alpamayo/a1_5_venv"
+  else
+    uv venv a1_5_venv
+  fi
   # shellcheck source=/dev/null
   source a1_5_venv/bin/activate
   uv sync --active
