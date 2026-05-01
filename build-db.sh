@@ -4,12 +4,12 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  ./build-db [options] <route-folder-or-segment-folder>
+  ./build-db.sh [options] <route-folder-or-segment-folder>
 
 Examples:
-  ./build-db datasets/route_1
-  ./build-db datasets/route_1/segment_00
-  ./build-db --openpilot-route "d34c14daa88a1e86/000000ca--7c5d326170" datasets/route_1
+  ./build-db.sh datasets/route_1
+  ./build-db.sh datasets/route_1/segment_00
+  ./build-db.sh --openpilot-route "d34c14daa88a1e86/000000ca--7c5d326170" datasets/route_1
 
 Options:
   --openpilot-route ROUTE_ID   Run run_pipeline.py first and write data into the route folder.
