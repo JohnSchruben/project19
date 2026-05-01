@@ -60,17 +60,11 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="Annotate images locally with YOLO and export YOLO/COCO/CVAT files."
     )
-    parser.add_argument("folder", help="Folder containing images to annotate")
+    parser.add_argument("segment", help="Segment folder, e.g. datasets/route_3/segment_00")
     parser.add_argument(
         "--model",
         default="yolov8s.pt",
         help="Ultralytics model path/name. Default: yolov8s.pt",
-    )
-    parser.add_argument(
-        "--output-dir",
-        "-o",
-        default=None,
-        help="Output directory. Default: <image folder>/../local_yolo_annotations",
     )
     parser.add_argument(
         "--confidence",
@@ -133,10 +127,8 @@ def discover_image_sets(folder):
     return input_dir, image_sets, True
 
 
-def make_output_dirs(base_dir, output_dir, camera_name, multi_camera):
-    if output_dir:
-        root_dir = Path(output_dir).expanduser().resolve()
-    elif multi_camera:
+def make_output_dirs(base_dir, camera_name, multi_camera):
+    if multi_camera:
         root_dir = base_dir / "local_yolo_annotations"
     else:
         root_dir = base_dir.parent / "local_yolo_annotations"
@@ -420,7 +412,7 @@ def annotate_image_set(args, model, camera_name, image_dir, images, output_dir, 
 
 def main():
     args = parse_args()
-    base_dir, image_sets, multi_camera = discover_image_sets(args.folder)
+    base_dir, image_sets, multi_camera = discover_image_sets(args.segment)
 
     print(f"[*] Loading model: {args.model}")
     model = YOLO(args.model)
@@ -430,7 +422,6 @@ def main():
     for camera_name, image_dir, images in image_sets:
         root_output_dir, output_dir, labels_dir = make_output_dirs(
             base_dir=base_dir,
-            output_dir=args.output_dir,
             camera_name=camera_name,
             multi_camera=multi_camera,
         )
