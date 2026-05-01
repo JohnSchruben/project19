@@ -129,9 +129,9 @@ def discover_image_sets(folder):
 
 def make_output_dirs(base_dir, camera_name, multi_camera):
     if multi_camera:
-        root_dir = base_dir / "local_yolo_annotations"
+        root_dir = base_dir / "annotations"
     else:
-        root_dir = base_dir.parent / "local_yolo_annotations"
+        root_dir = base_dir.parent / "annotations"
 
     out_dir = root_dir / camera_name if multi_camera else root_dir
     labels_dir = out_dir / "labels"
@@ -156,7 +156,7 @@ def make_output_dir(image_dir, output_dir):
     if output_dir:
         out_dir = Path(output_dir).expanduser().resolve()
     else:
-        out_dir = image_dir.parent / "local_yolo_annotations"
+        out_dir = image_dir.parent / "annotations"
 
     labels_dir = out_dir / "labels"
     labels_dir.mkdir(parents=True, exist_ok=True)
@@ -299,7 +299,7 @@ def build_cvat_xml(images, detections_by_image):
 
     meta = ET.SubElement(root, "meta")
     task = ET.SubElement(meta, "task")
-    ET.SubElement(task, "name").text = "local_yolo_annotations"
+    ET.SubElement(task, "name").text = "annotations"
     labels_node = ET.SubElement(task, "labels")
     for label_name in TARGET_LABELS:
         label_node = ET.SubElement(labels_node, "label")

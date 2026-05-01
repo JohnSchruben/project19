@@ -139,7 +139,9 @@ def infer_base_source(segment_path):
 def infer_yolo_labels_dir(segment_path):
     path = Path(segment_path).resolve()
     segment_dir = path.parent if path.name in CAMERA_DIRS else path
-    candidate = segment_dir / "local_yolo_annotations"
+    candidate = segment_dir / "annotations"
+    if not candidate.exists():
+        candidate = segment_dir / "local_yolo_annotations"
     return str(candidate) if candidate.exists() else None
 
 
