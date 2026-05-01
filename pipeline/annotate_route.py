@@ -413,15 +413,11 @@ def annotate_image_set(args, model, camera_name, image_dir, images, output_dir, 
     }
 
 
-def main():
-    args = parse_args()
-    base_dir, image_sets, multi_camera = discover_image_sets(args.segment)
-
-    print(f"[*] Loading model: {args.model}")
-    model = YOLO(args.model)
-
+def annotate_target(args, model, target):
+    base_dir, image_sets, multi_camera = discover_image_sets(target)
     all_summaries = []
     root_output_dir = None
+
     for camera_name, image_dir, images in image_sets:
         root_output_dir, output_dir, labels_dir = make_output_dirs(
             base_dir=base_dir,
@@ -441,6 +437,48 @@ def main():
             encoding="utf-8",
         )
 
+    return root_output_dir, all_summaries
+
+
+def discover_annotation_targets(target):
+    input_dir = Path(target).expanduser().resolve()
+    if not input_dir.is_dir():
+        raise FileNotFoundError(f"Folder not found: {input_dir}")
+
+    direct_images = images_in_dir(input_dir)
+    camera_has_images = any(
+        (input_dir / camera_name).is_dir() and images_in_dir(input_dir / camera_name)
+        for camera_name in CAMERA_DIRS
+    )
+    if direct_images or camera_has_images:
+        return [input_dir]
+
+    segments = sorted(
+        path for path in input_dir.iterdir()
+        if path.is_dir() and path.name.startswith("segment_")
+    )
+    if segments:
+        return segments
+
+    return [input_dir]
+
+
+def main():
+    args = parse_args()
+    targets = discover_annotation_targets(args.segment)
+
+    print(f"[*] Loading model: {args.model}")
+    model = YOLO(args.model)
+
+    all_summaries = []
+    output_dirs = []
+    for target in targets:
+        print(f"\n[*] Annotating target: {target}")
+        root_output_dir, target_summaries = annotate_target(args, model, target)
+        if root_output_dir is not None:
+            output_dirs.append(root_output_dir)
+        all_summaries.extend(target_summaries)
+
     total_images = sum(item["images"] for item in all_summaries)
     total_boxes = sum(item["boxes"] for item in all_summaries)
 
@@ -448,7 +486,9 @@ def main():
     print(f"Cameras:      {', '.join(item['camera'] for item in all_summaries)}")
     print(f"Images:       {total_images}")
     print(f"Boxes:        {total_boxes}")
-    print(f"Output:       {root_output_dir}")
+    print("Output:")
+    for output_dir in output_dirs:
+        print(f"  - {output_dir}")
 
 
 if __name__ == "__main__":
