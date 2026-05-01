@@ -12,7 +12,7 @@ Examples:
   ./run_full_pipeline.sh --openpilot-route "d34c14daa88a1e86/000000ca--7c5d326170" datasets/route_1
 
 Options:
-  --openpilot-route ROUTE_ID   Run route_caputure.py first and write data into the route folder.
+  --openpilot-route ROUTE_ID   Run pipeline/route_caputure.py first and write data into the route folder.
   --num-traj-samples N         Alpamayo trajectory samples per frame. Default: 1.
   --help                       Show this help.
 EOF
@@ -75,6 +75,7 @@ pick_host_python() {
     [[ -z "$resolved" ]] && continue
     [[ -n "$venv_bin" && "$resolved" == "$venv_bin" ]] && continue
     [[ "$resolved" == "$PROJECT_ROOT/alpamayo/a1_5_venv/bin" ]] && continue
+    [[ "$resolved" == "$PROJECT_ROOT/a1_5_venv/bin" ]] && continue
 
     candidate="$resolved/python3"
     if [[ -x "$candidate" ]] && "$candidate" -m pip --version >/dev/null 2>&1; then
@@ -122,16 +123,21 @@ print(Path(sys.argv[1]).expanduser().resolve())
 PY
 }
 
-relative_from_alpamayo() {
-  PROJECT_ROOT="$PROJECT_ROOT" "$HOST_PYTHON" - "$1" <<'PY'
-from pathlib import Path
-import os
-import sys
-project = Path(os.environ["PROJECT_ROOT"]).resolve()
-alpamayo = project / "alpamayo"
-target = Path(sys.argv[1]).resolve()
-print(os.path.relpath(target, alpamayo).replace("\\", "/"))
-PY
+setup_alpamayo_env() {
+  local venv_dir="$PROJECT_ROOT/a1_5_venv"
+
+  if [[ -f "$venv_dir/bin/activate" ]]; then
+    echo "[INFO] Reusing existing Alpamayo venv: $venv_dir"
+  else
+    uv venv "$venv_dir" --python 3.12
+  fi
+
+  # shellcheck source=/dev/null
+  source "$venv_dir/bin/activate"
+  (
+    cd "$PROJECT_ROOT/alpamayo"
+    uv sync --active
+  )
 }
 
 if [[ -n "$OPENPILOT_ROUTE" ]]; then
@@ -140,7 +146,7 @@ if [[ -n "$OPENPILOT_ROUTE" ]]; then
     DATASET_DIR="$(dirname "$TARGET")"
   fi
   echo "[INFO] Running route capture into $DATASET_DIR"
-  "$HOST_PYTHON" route_caputure.py --route "$OPENPILOT_ROUTE" --dataset-dir "$DATASET_DIR"
+  "$HOST_PYTHON" pipeline/route_caputure.py --route "$OPENPILOT_ROUTE" --dataset-dir "$DATASET_DIR"
 fi
 
 if [[ ! -d "$TARGET" ]]; then
@@ -179,35 +185,20 @@ echo "[INFO] Installing local annotation dependencies"
 
 echo "[INFO] Running local YOLO annotation"
 for seg in "${SEGMENTS[@]}"; do
-  "$HOST_PYTHON" annotate.py "$seg"
+  "$HOST_PYTHON" pipeline/annotate_route.py "$seg"
 done
 
 echo "[INFO] Preparing Alpamayo environment"
-(
-  cd alpamayo
-  if [[ -f a1_5_venv/bin/activate ]]; then
-    echo "[INFO] Reusing existing Alpamayo venv: alpamayo/a1_5_venv"
-  else
-    uv venv a1_5_venv
-  fi
-  # shellcheck source=/dev/null
-  source a1_5_venv/bin/activate
-  uv sync --active
+setup_alpamayo_env
 
-  ROUTE_REL="$(relative_from_alpamayo "$ROUTE_DIR")"
-  for seg in "${SEGMENTS[@]}"; do
-    SEGMENT_NAME="$(basename "$seg")"
-    echo "[INFO] Running Alpamayo for $SEGMENT_NAME"
-    python batch_export_inference.py \
-      --route "$ROUTE_REL" \
-      --segment "$SEGMENT_NAME" \
-      --num-traj-samples "$NUM_TRAJ_SAMPLES"
-  done
+for seg in "${SEGMENTS[@]}"; do
+  echo "[INFO] Running Alpamayo for $(basename "$seg")"
+  python pipeline/run_alpamayo.py "$seg" --num-traj-samples "$NUM_TRAJ_SAMPLES"
+done
 
-  deactivate
-)
+deactivate
 
 echo "[INFO] Importing annotations and Alpamayo predictions into pipeline DB"
-"$HOST_PYTHON" import.py "$TARGET_ABS" --overwrite
+"$HOST_PYTHON" pipeline/import_route_db.py "$TARGET_ABS" --overwrite
 
 echo "[SUCCESS] Built pipeline/annotations.db"

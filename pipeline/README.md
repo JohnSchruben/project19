@@ -4,7 +4,17 @@ An integrated SQLite database (`annotations.db`) is used for managing, filtering
 
 ### Interacting with the CLI:
 ```bash
-python import_annotations.py  # Bulk import route frame extractions into DB
+python annotate_route.py ../datasets/route_1/segment_00
+python run_alpamayo.py ../datasets/route_1/segment_00
+python import_route_db.py ../datasets/route_1/segment_00 --overwrite
+```
+
+From the project root, run the same scripts as:
+
+```bash
+python pipeline/annotate_route.py datasets/route_1/segment_00
+python pipeline/run_alpamayo.py datasets/route_1/segment_00
+python pipeline/import_route_db.py datasets/route_1/segment_00 --overwrite
 ```
 
 ### Programmatic Python Access:

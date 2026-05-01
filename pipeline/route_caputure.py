@@ -9,6 +9,21 @@ import time
 from pathlib import Path
 
 
+PIPELINE_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = PIPELINE_DIR.parent
+
+
+def resolve_project_path(raw_path):
+    path = Path(raw_path).expanduser()
+    if path.is_absolute():
+        return path
+    if path.parts and path.parts[0] == "..":
+        return path.resolve()
+    cwd_candidate = path.resolve()
+    if cwd_candidate.exists():
+        return cwd_candidate
+    return (PROJECT_ROOT / path).resolve()
+
 
 def get_terminal_cmd(cmd_list, env, block=False):
     """
@@ -57,17 +72,17 @@ def run_pipeline(args):
         os.environ["PATH"] = f"{local_bin}:{os.environ['PATH']}"
 
     # Hardcoded configuration (formerly general args)
-    openpilot_dir_str = "../openpilot"
+    openpilot_dir = PROJECT_ROOT.parent / "openpilot"
     python_cmd = None
     new_terminal_modeld = True
     new_terminal_replay = False
     dry_run = False
 
     # Resolve openpilot directory
-    op_dir = Path(openpilot_dir_str).resolve()
+    op_dir = openpilot_dir.resolve()
     if not op_dir.exists():
         print(f"ERROR: Openpilot directory not found at {op_dir}")
-        print("Please ensure ../openpilot exists")
+        print(f"Please ensure openpilot exists next to {PROJECT_ROOT}")
         return
 
     # Paths (relative to openpilot_dir unless absolute)
@@ -79,7 +94,7 @@ def run_pipeline(args):
     if not modeld_path.is_absolute():
         modeld_path = op_dir / modeld_path
 
-    dataset_dir = Path(args.dataset_dir).expanduser().resolve()
+    dataset_dir = resolve_project_path(args.dataset_dir).resolve()
 
     # Check if tools exist
     if not replay_path.exists():
@@ -257,6 +272,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     # Ensure dataset directory exists
-    Path(args.dataset_dir).expanduser().mkdir(parents=True, exist_ok=True)
+    resolve_project_path(args.dataset_dir).mkdir(parents=True, exist_ok=True)
 
     run_pipeline(args)
