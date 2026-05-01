@@ -63,6 +63,26 @@ class DatabaseExplorer:
         plt.tight_layout()
         plt.show()
 
+    def pedestrian_annotations(self):
+        return pd.read_sql_query(
+            """
+            SELECT
+                f.id AS frame_id,
+                f.source,
+                f.frame_number,
+                f.filename,
+                a.id AS annotation_id,
+                lc.confidence
+            FROM frames f
+            JOIN annotations a ON a.frame_id = f.id
+            JOIN label_categories lc ON lc.annotation_id = a.id
+            WHERE lc.category = 'pedestrian'
+              AND lc.present = 1
+            ORDER BY f.source, f.frame_number
+            """,
+            self.conn,
+        )
+
     def get_frame_row(self, frame_id_or_row):
         if isinstance(frame_id_or_row, int):
             row = self.conn.execute("SELECT * FROM frames WHERE id=?", (frame_id_or_row,)).fetchone()
