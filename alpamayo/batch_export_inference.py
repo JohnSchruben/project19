@@ -17,8 +17,6 @@ parser.add_argument("--route", type=str, default=get_default_route(),
                     help="Path to a route directory containing segments")
 parser.add_argument("--frames", type=int, default=64, 
                     help="Number of future frames to graph for predictions")
-parser.add_argument("--command", type=str, default=None, 
-                    help="Optional navigation command to inject into Alpamayo prompt (e.g., 'Turn Right')")
 parser.add_argument("--segment", type=str, default=None,
                     help="Process only a specific segment (e.g., 'segment_00')")
 parser.add_argument("--start-frame", type=int, default=0,
@@ -36,14 +34,8 @@ parser.add_argument("--cameras", nargs="+", choices=["wide", "left", "right", "f
                     help="Cameras to include (wide, left, right, front). Unlisted cameras will be excluded.")
 parser.add_argument("--max-gen-length", type=int, default=256,
                     help="Maximum generation length for the trajectory diffusion model. Lower speeds it up but reduces max distance.")
-parser.add_argument("--dataset-fps", type=float, default=10.0,
-                    help="Dataset frame rate used for export timing (default: 10.0).")
-parser.add_argument("--output-fps", type=float, default=40.0,
-                    help="Output video frame rate (default: 40.0).")
 parser.add_argument("--plot-all-samples", action="store_true",
                     help="Plot all trajectory samples instead of just the selected best path")
-parser.add_argument("--prediction-json-dir", type=str, default=None,
-                    help="Optional JSON output directory. Default: <segment>/predictions")
 global_args = parser.parse_args()
 
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
@@ -70,6 +62,9 @@ TURN_COLOR_MAP = {
     "Command": "lime",
     "Sample": "gray",
 }
+
+DATASET_FPS = 10.0
+OUTPUT_FPS = 40.0
 
 import signal
 
@@ -245,8 +240,6 @@ def samples_to_records(samples: np.ndarray, num_frames: int) -> list[dict]:
 
 
 def prediction_json_dir(args, seg_dir: str) -> str:
-    if args.prediction_json_dir:
-        return os.path.abspath(args.prediction_json_dir)
     return os.path.join(seg_dir, "predictions")
 
 
@@ -279,7 +272,7 @@ def save_prediction_json(
         "t0_us": data.get("t0_us"),
         "nav_command": nav_cmd,
         "command_text": cmd_text,
-        "command_source": "fixed" if args.command else "ground_truth_heuristic",
+        "command_source": "ground_truth_heuristic",
         "selection_mode": args.selection_mode,
         "selected_sample_index": int(sample_idx),
         "num_traj_samples": int(args.num_traj_samples),
@@ -315,9 +308,7 @@ def main():
         return
 
     cam_mapping = {"left": 0, "wide": 1, "right": 2, "front": 6}
-    frame_repeat = 1
-    if args.dataset_fps > 0 and args.output_fps > 0:
-        frame_repeat = max(1, int(round(args.output_fps / args.dataset_fps)))
+    frame_repeat = max(1, int(round(OUTPUT_FPS / DATASET_FPS)))
     excluded_cameras = []
     for name, idx in cam_mapping.items():
         if name not in args.cameras:
@@ -461,7 +452,7 @@ def main():
             if out is None:
                 h, w, _ = img_np.shape
                 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-                out = cv2.VideoWriter(output_video_path, fourcc, args.output_fps, (w, h))
+                out = cv2.VideoWriter(output_video_path, fourcc, OUTPUT_FPS, (w, h))
 
             try:
                 data = load_custom_dataset(seg_dir, local_idx, exclude_cameras=excluded_cameras)
@@ -473,10 +464,7 @@ def main():
 
             gt_xyz = data["ego_future_xyz"][0, 0].numpy()
             
-            # Determine navigation command dynamically if not provided
-            nav_cmd = args.command
-            if nav_cmd is None:
-                nav_cmd = infer_navigation_command(gt_xyz)
+            nav_cmd = infer_navigation_command(gt_xyz)
 
             # Set fixed seed to match the nav notebook exactly for deterministic conditional inference
             torch.cuda.manual_seed_all(42)
@@ -528,7 +516,7 @@ def main():
                         f"Representative Reasoning: \033[38;2;255;165;0m{cot}\033[0m"
                     )
 
-                json_path = save_prediction_json(
+                save_prediction_json(
                     args=args,
                     route_name=route_name,
                     seg_name=seg_name,
@@ -543,7 +531,6 @@ def main():
                     n_frames=selected_frames,
                     data=data,
                 )
-                print(f"Saved prediction JSON: {json_path}")
                 
                 if args.plot_all_samples:
                     pred_np = pred_xyz.detach().cpu().numpy()[0, 0]
