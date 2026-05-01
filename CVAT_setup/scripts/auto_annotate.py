@@ -13,7 +13,7 @@ def main():
     parser.add_argument("--url", type=str, default="http://localhost:8080", help="CVAT URL")
     parser.add_argument("--user", type=str, default="admin", help="CVAT admin username")
     parser.add_argument("--password", type=str, default="admin123", help="CVAT admin password")
-    parser.add_argument("--model", type=str, default="ultralytics-yolov8", help="YOLO function name (e.g. ultralytics-yolov8 or onnx-wongkinyiu-yolov7)")
+    parser.add_argument("--model", type=str, default="ultralytics-yolov8s-custom-v2", help="YOLO function name (e.g. ultralytics-yolov8s-custom-v2 or onnx-wongkinyiu-yolov7)")
     parser.add_argument("--output", "-o", type=str, default="annotations.zip", help="Output zip filename")
     args = parser.parse_args()
 
@@ -51,10 +51,10 @@ def main():
 
         # 2. Define standard labels
         labels = [
-            models.PatchedLabelRequest(name="Car"),
-            models.PatchedLabelRequest(name="Truck"),
-            models.PatchedLabelRequest(name="Motorcycle"),
-            models.PatchedLabelRequest(name="Stop sign"),
+            models.PatchedLabelRequest(name="pedestrian"),
+            models.PatchedLabelRequest(name="vehicle"),
+            models.PatchedLabelRequest(name="traffic_light"),
+            models.PatchedLabelRequest(name="stop_sign"),
         ]
 
         # 3. Create Project
