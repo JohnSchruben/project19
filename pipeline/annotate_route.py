@@ -16,23 +16,26 @@ Default target labels:
 """
 
 import argparse
+import importlib
 import json
 import os
+import subprocess
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-try:
-    from PIL import Image
-except ImportError:
-    print("ERROR: Pillow is required. Install with: pip install pillow", file=sys.stderr)
-    sys.exit(1)
 
-try:
-    from ultralytics import YOLO
-except ImportError:
-    print("ERROR: ultralytics is required. Install with: pip install ultralytics", file=sys.stderr)
-    sys.exit(1)
+def ensure_dependency(import_name, pip_name):
+    try:
+        return importlib.import_module(import_name)
+    except ImportError:
+        print(f"[INFO] Installing missing dependency: {pip_name}")
+        subprocess.run([sys.executable, "-m", "pip", "install", pip_name], check=True)
+        return importlib.import_module(import_name)
+
+
+Image = ensure_dependency("PIL.Image", "pillow")
+YOLO = ensure_dependency("ultralytics", "ultralytics").YOLO
 
 
 TARGET_LABELS = ["pedestrian", "vehicle", "traffic_light", "stop_sign"]

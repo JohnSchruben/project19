@@ -180,9 +180,6 @@ done
 
 reset_pipeline_db
 
-echo "[INFO] Installing local annotation dependencies"
-"$HOST_PYTHON" -m pip install ultralytics pillow
-
 echo "[INFO] Running local YOLO annotation"
 for seg in "${SEGMENTS[@]}"; do
   "$HOST_PYTHON" pipeline/annotate_route.py "$seg"
