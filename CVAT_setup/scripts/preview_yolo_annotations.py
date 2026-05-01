@@ -4,9 +4,7 @@ Draw YOLO annotation boxes onto images for quick visual inspection.
 
 Example:
   python3 CVAT_setup/scripts/preview_yolo_annotations.py \
-    datasets/route_3/segment_00/raw \
-    --labels-dir datasets/route_3/segment_00/local_yolo_annotations/labels \
-    --classes-file datasets/route_3/segment_00/local_yolo_annotations/classes.txt
+    datasets/route_3/segment_00
 """
 
 import argparse
@@ -16,6 +14,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+CAMERA_DIRS = ("raw", "raw_front", "raw_left", "raw_right")
 COLORS = [
     "#e53935",
     "#1e88e5",
@@ -28,9 +27,9 @@ COLORS = [
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Render YOLO annotations onto image copies.")
-    parser.add_argument("images_dir", help="Folder containing the original images")
-    parser.add_argument("--labels-dir", required=True, help="Folder containing YOLO .txt labels")
-    parser.add_argument("--classes-file", required=True, help="classes.txt file")
+    parser.add_argument("images_dir", help="Image folder or segment folder containing raw camera folders")
+    parser.add_argument("--labels-dir", default=None, help="Folder containing YOLO .txt labels")
+    parser.add_argument("--classes-file", default=None, help="classes.txt file")
     parser.add_argument(
         "--output-dir",
         default=None,
@@ -45,6 +44,61 @@ def parse_args():
     return parser.parse_args()
 
 
+def images_in_dir(images_dir):
+    return sorted(
+        path for path in Path(images_dir).iterdir()
+        if path.is_file() and path.suffix.lower() in IMAGE_EXTS
+    )
+
+
+def discover_image_sets(input_dir):
+    input_dir = Path(input_dir)
+    direct_images = images_in_dir(input_dir)
+    if direct_images:
+        camera_name = input_dir.name if input_dir.name in CAMERA_DIRS else "images"
+        return input_dir, [(camera_name, input_dir, direct_images)], False
+
+    image_sets = []
+    for camera_name in CAMERA_DIRS:
+        camera_dir = input_dir / camera_name
+        if camera_dir.is_dir():
+            images = images_in_dir(camera_dir)
+            if images:
+                image_sets.append((camera_name, camera_dir, images))
+
+    if not image_sets:
+        raise SystemExit(f"No images found in {input_dir} or camera folders")
+    return input_dir, image_sets, True
+
+
+def resolve_annotation_dirs(args, base_dir, camera_name, multi_camera):
+    if args.labels_dir:
+        labels_dir = Path(args.labels_dir)
+    elif multi_camera:
+        labels_dir = base_dir / "local_yolo_annotations" / camera_name / "labels"
+    else:
+        labels_dir = base_dir.parent / "local_yolo_annotations" / "labels"
+
+    if args.classes_file:
+        classes_file = Path(args.classes_file)
+    elif multi_camera:
+        root_classes = base_dir / "local_yolo_annotations" / "classes.txt"
+        camera_classes = base_dir / "local_yolo_annotations" / camera_name / "classes.txt"
+        classes_file = root_classes if root_classes.exists() else camera_classes
+    else:
+        classes_file = labels_dir.parent / "classes.txt"
+
+    if args.output_dir:
+        output_root = Path(args.output_dir)
+        output_dir = output_root / camera_name if multi_camera else output_root
+    elif multi_camera:
+        output_dir = base_dir / "local_yolo_annotations" / camera_name / "preview"
+    else:
+        output_dir = labels_dir.parent / "preview"
+
+    return labels_dir, classes_file, output_dir
+
+
 def load_classes(classes_file):
     path = Path(classes_file)
     return [
@@ -55,10 +109,7 @@ def load_classes(classes_file):
 
 
 def find_images(images_dir, limit):
-    images = sorted(
-        path for path in Path(images_dir).iterdir()
-        if path.is_file() and path.suffix.lower() in IMAGE_EXTS
-    )
+    images = images_in_dir(images_dir)
     if limit is not None:
         images = images[:limit]
     return images
@@ -134,30 +185,29 @@ def render_preview(image_path, labels_dir, classes, output_dir, font):
 
 def main():
     args = parse_args()
-    images_dir = Path(args.images_dir)
-    labels_dir = Path(args.labels_dir)
-    classes = load_classes(args.classes_file)
-
-    if args.output_dir:
-        output_dir = Path(args.output_dir)
-    else:
-        output_dir = labels_dir.parent / "preview"
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    images = find_images(images_dir, args.limit)
-    if not images:
-        raise SystemExit(f"No images found in {images_dir}")
-
+    base_dir, image_sets, multi_camera = discover_image_sets(Path(args.images_dir))
     font = ImageFont.load_default()
     total_boxes = 0
+    total_images = 0
 
-    print(f"[*] Rendering {len(images)} preview images to {output_dir}")
-    for image_path in images:
-        out_path, box_count = render_preview(image_path, labels_dir, classes, output_dir, font)
-        total_boxes += box_count
-        print(f"{image_path.name}: {box_count} boxes -> {out_path}")
+    for camera_name, images_dir, images in image_sets:
+        labels_dir, classes_file, output_dir = resolve_annotation_dirs(
+            args, base_dir, camera_name, multi_camera
+        )
+        classes = load_classes(classes_file)
+        output_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"\n[SUCCESS] Wrote {len(images)} preview images with {total_boxes} boxes.")
+        if args.limit is not None:
+            images = images[:args.limit]
+        total_images += len(images)
+
+        print(f"[*] Rendering {len(images)} {camera_name} preview images to {output_dir}")
+        for image_path in images:
+            out_path, box_count = render_preview(image_path, labels_dir, classes, output_dir, font)
+            total_boxes += box_count
+            print(f"{camera_name}/{image_path.name}: {box_count} boxes -> {out_path}")
+
+    print(f"\n[SUCCESS] Wrote {total_images} preview images with {total_boxes} boxes.")
 
 
 if __name__ == "__main__":

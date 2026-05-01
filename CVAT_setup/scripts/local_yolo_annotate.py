@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Run YOLO locally on a folder of images and export annotations without CVAT.
+Run YOLO locally on an image folder or route segment and export annotations
+without CVAT.
 
 Outputs:
   - YOLO label txt files
@@ -52,6 +53,7 @@ CLASS_MAP = {
 }
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+CAMERA_DIRS = ("raw", "raw_front", "raw_left", "raw_right")
 
 
 def parse_args():
@@ -96,15 +98,62 @@ def parse_args():
     return parser.parse_args()
 
 
+def images_in_dir(image_dir):
+    return sorted(
+        path for path in image_dir.iterdir()
+        if path.is_file() and path.suffix.lower() in IMAGE_EXTS
+    )
+
+
+def discover_image_sets(folder):
+    """Return [(camera_name, image_dir, images)] for an image dir or segment dir."""
+    input_dir = Path(folder).expanduser().resolve()
+    if not input_dir.is_dir():
+        raise FileNotFoundError(f"Folder not found: {input_dir}")
+
+    direct_images = images_in_dir(input_dir)
+    if direct_images:
+        camera_name = input_dir.name if input_dir.name in CAMERA_DIRS else "images"
+        return input_dir, [(camera_name, input_dir, direct_images)], False
+
+    image_sets = []
+    for camera_name in CAMERA_DIRS:
+        camera_dir = input_dir / camera_name
+        if not camera_dir.is_dir():
+            continue
+        images = images_in_dir(camera_dir)
+        if images:
+            image_sets.append((camera_name, camera_dir, images))
+
+    if not image_sets:
+        raise FileNotFoundError(
+            f"No images found in {input_dir} or camera folders: {', '.join(CAMERA_DIRS)}"
+        )
+
+    return input_dir, image_sets, True
+
+
+def make_output_dirs(base_dir, output_dir, camera_name, multi_camera):
+    if output_dir:
+        root_dir = Path(output_dir).expanduser().resolve()
+    elif multi_camera:
+        root_dir = base_dir / "local_yolo_annotations"
+    else:
+        root_dir = base_dir.parent / "local_yolo_annotations"
+
+    out_dir = root_dir / camera_name if multi_camera else root_dir
+    labels_dir = out_dir / "labels"
+    labels_dir.mkdir(parents=True, exist_ok=True)
+    root_dir.mkdir(parents=True, exist_ok=True)
+    return root_dir, out_dir, labels_dir
+
+
 def list_images(folder):
     image_dir = Path(folder).expanduser().resolve()
     if not image_dir.is_dir():
         raise FileNotFoundError(f"Image folder not found: {image_dir}")
 
-    images = sorted(
-        path for path in image_dir.iterdir()
-        if path.is_file() and path.suffix.lower() in IMAGE_EXTS
-    )
+    images = images_in_dir(image_dir)
     if not images:
         raise FileNotFoundError(f"No images found in: {image_dir}")
 
@@ -313,19 +362,13 @@ def write_labels_file(output_dir):
     labels_path.write_text("\n".join(TARGET_LABELS) + "\n", encoding="utf-8")
 
 
-def main():
-    args = parse_args()
-    image_dir, images = list_images(args.folder)
-    output_dir, labels_dir = make_output_dir(image_dir, args.output_dir)
-
-    print(f"[*] Loading model: {args.model}")
-    model = YOLO(args.model)
-
-    print(f"[*] Found {len(images)} images in {image_dir}")
-    print(f"[*] Writing annotations to {output_dir}")
-
+def annotate_image_set(args, model, camera_name, image_dir, images, output_dir, labels_dir):
     detections_by_image = {}
     total_boxes = 0
+
+    print(f"\n[*] Camera: {camera_name}")
+    print(f"[*] Found {len(images)} images in {image_dir}")
+    print(f"[*] Writing annotations to {output_dir}")
 
     for index, image_path in enumerate(images, start=1):
         detections = detect_image(
@@ -344,8 +387,6 @@ def main():
 
         print(f"[{index:04d}/{len(images):04d}] {image_path.name}: {len(detections)} boxes")
 
-    write_labels_file(output_dir)
-
     coco = build_coco(images, detections_by_image)
     coco_path = output_dir / "annotations_coco.json"
     coco_path.write_text(json.dumps(coco, indent=2), encoding="utf-8")
@@ -355,6 +396,7 @@ def main():
     cvat_tree.write(cvat_xml_path, encoding="utf-8", xml_declaration=True)
 
     summary = {
+        "camera": camera_name,
         "image_dir": str(image_dir),
         "output_dir": str(output_dir),
         "model": args.model,
@@ -366,13 +408,53 @@ def main():
     summary_path = output_dir / "summary.json"
     summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
 
+    return {
+        "camera": camera_name,
+        "images": len(images),
+        "boxes": total_boxes,
+        "labels_dir": str(labels_dir),
+        "coco_path": str(coco_path),
+        "cvat_xml_path": str(cvat_xml_path),
+    }
+
+
+def main():
+    args = parse_args()
+    base_dir, image_sets, multi_camera = discover_image_sets(args.folder)
+
+    print(f"[*] Loading model: {args.model}")
+    model = YOLO(args.model)
+
+    all_summaries = []
+    root_output_dir = None
+    for camera_name, image_dir, images in image_sets:
+        root_output_dir, output_dir, labels_dir = make_output_dirs(
+            base_dir=base_dir,
+            output_dir=args.output_dir,
+            camera_name=camera_name,
+            multi_camera=multi_camera,
+        )
+        write_labels_file(output_dir)
+        if multi_camera:
+            write_labels_file(root_output_dir)
+        all_summaries.append(
+            annotate_image_set(args, model, camera_name, image_dir, images, output_dir, labels_dir)
+        )
+
+    if root_output_dir is not None:
+        (root_output_dir / "summary.json").write_text(
+            json.dumps({"input_dir": str(base_dir), "multi_camera": multi_camera, "cameras": all_summaries}, indent=2),
+            encoding="utf-8",
+        )
+
+    total_images = sum(item["images"] for item in all_summaries)
+    total_boxes = sum(item["boxes"] for item in all_summaries)
+
     print("\n[SUCCESS] Local annotation complete")
-    print(f"Images:       {len(images)}")
+    print(f"Cameras:      {', '.join(item['camera'] for item in all_summaries)}")
+    print(f"Images:       {total_images}")
     print(f"Boxes:        {total_boxes}")
-    print(f"YOLO labels:  {labels_dir}")
-    print(f"COCO JSON:    {coco_path}")
-    print(f"CVAT XML:     {cvat_xml_path}")
-    print(f"Classes:      {output_dir / 'classes.txt'}")
+    print(f"Output:       {root_output_dir}")
 
 
 if __name__ == "__main__":
