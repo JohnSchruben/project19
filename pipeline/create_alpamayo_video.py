@@ -270,13 +270,10 @@ def draw_path_panel(frame: np.ndarray, payload: dict) -> None:
 def draw_text_panel(frame: np.ndarray, segment_name: str, frame_index: int, payload: dict) -> None:
     command = payload.get("command_text") or payload.get("command") or payload.get("nav_command", "")
     reasoning = payload.get("reasoning_text") or payload.get("reasoning", "")
-    frames_stored = payload.get("frames_stored", len(payload.get("selected_path", [])))
-    frames_requested = payload.get("frames_requested", frames_stored)
 
     lines = [
         f"{segment_name} | Frame {frame_index:06d}",
         f"Command: {command}",
-        f"Frames: {frames_stored}/{frames_requested}",
     ]
     if reasoning:
         lines.extend(textwrap.wrap(f"Reasoning: {reasoning}", width=76))
@@ -295,7 +292,7 @@ def draw_text_panel(frame: np.ndarray, segment_name: str, frame_index: int, payl
         color = (255, 255, 255)
         if idx == 1:
             color = (110, 255, 110)
-        elif idx >= 3:
+        elif idx >= 2:
             color = (80, 210, 255)
         cv2.putText(frame, line, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.62, color, 1, cv2.LINE_AA)
         y += line_h
