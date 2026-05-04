@@ -215,9 +215,17 @@ __pycache__/
 **/.pytest_cache/
 tests/.tmp/
 tmp*/
+pipeline/.ipynb_checkpoints/
 
 # Openpilot datasets
 datasets/
+
+# Model weights
+yolov8s.pt
+
+# Local generated state
+alpamayo/uv.lock
+pipeline/annotations.db
 
 # Videos
 videos/
