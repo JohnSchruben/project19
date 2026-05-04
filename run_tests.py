@@ -5,6 +5,7 @@ import sys
 import unittest
 import argparse
 import os
+import fnmatch
 from pathlib import Path
 
 
@@ -26,9 +27,23 @@ def main() -> int:
 
     pattern = "test_dependencies.py" if args.dependencies else "test_*.py"
     suite = unittest.defaultTestLoader.discover(str(TESTS_DIR), pattern=pattern)
-    runner = unittest.TextTestRunner(verbosity=2)
+    if not args.dependencies:
+        suite = unittest.TestSuite(
+            test
+            for test in iter_tests(suite)
+            if not fnmatch.fnmatch(test.__class__.__module__, "test_dependencies")
+        )
+    runner = unittest.TextTestRunner(verbosity=1)
     result = runner.run(suite)
     return 0 if result.wasSuccessful() else 1
+
+
+def iter_tests(suite: unittest.TestSuite):
+    for item in suite:
+        if isinstance(item, unittest.TestSuite):
+            yield from iter_tests(item)
+        else:
+            yield item
 
 
 if __name__ == "__main__":
