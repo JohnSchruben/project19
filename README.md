@@ -42,11 +42,13 @@ Side Task: We will program an automatic data preparation pipeline for autonomous
 
 ### Tests
 
-Run the lightweight unit tests from the repo root:
+Run the lightweight tests from the repo root:
 
 ```bash
 python3 run_tests.py
 ```
+
+This covers pipeline helpers, database CRUD/export, prediction import, route capture frame counting, and Alpamayo navigation-command logic.
 
 Check installed setup dependencies with:
 
