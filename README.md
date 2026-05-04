@@ -1,4 +1,4 @@
-# Group G Capstone Project19
+# Group G Capstone Project19 - CS-4273-001 Spring 2026
 ### Team Members
 - Dasanie Le (Sprint Master)
 - Trevor Lietch (QA)
@@ -170,15 +170,9 @@ We added project-specific tooling for MiLa route datasets:
 - `alpamayo/notebooks/inference_nav_custom.ipynb` is the custom navigation notebook for testing route frames, navigation commands, prediction selection modes, and reasoning output.
 - `frame_extractor/extract_3cam_route.py` creates `raw_left`, `raw_front`, and `raw_right` camera folders from `cam0`, `cam1`, and `cam2` videos in `frame_extractor/videos/`.
 
+If you are running the pipeline for this route d34c14daa88a1e86/00000019--ab71b8e01d, you can add the additional camera frames by adding the .mp4 files to the `frame_extractor/videos/` folder. Then run the frame extractor script. 
 ```bash
 python3 frame_extractor/extract_3cam_route.py \
   --route route_3
 ```
 
-Example route capture used for `datasets/route_3`:
-
-```bash
-./pipeline/route_caputure.py \
-  --route "d34c14daa88a1e86/00000019--ab71b8e01d" \
-  --dataset-dir datasets/route_3
-```
