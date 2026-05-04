@@ -61,6 +61,57 @@ def get_terminal_cmd(cmd_list, env, block=False):
             
     return None, False
 
+
+def count_raw_frames(dataset_dir):
+    frame_count = 0
+    latest_mtime = None
+    for raw_dir in dataset_dir.glob("segment_*/raw"):
+        if not raw_dir.is_dir():
+            continue
+        for frame_path in raw_dir.glob("*.png"):
+            frame_count += 1
+            try:
+                mtime = frame_path.stat().st_mtime
+            except OSError:
+                continue
+            latest_mtime = mtime if latest_mtime is None else max(latest_mtime, mtime)
+    return frame_count, latest_mtime
+
+
+def wait_for_replay_or_dataset_idle(replay_process, dataset_dir, idle_seconds):
+    initial_count, _ = count_raw_frames(dataset_dir)
+    last_count = initial_count
+    last_change = time.monotonic()
+    saw_new_frames = False
+
+    while True:
+        returncode = replay_process.poll()
+        if returncode is not None:
+            return returncode, False
+
+        frame_count, _ = count_raw_frames(dataset_dir)
+        if frame_count != last_count:
+            if frame_count > initial_count:
+                saw_new_frames = True
+            last_count = frame_count
+            last_change = time.monotonic()
+
+        idle_for = time.monotonic() - last_change
+        if saw_new_frames and idle_seconds > 0 and idle_for >= idle_seconds:
+            print(
+                f"\nNo new raw frames for {idle_seconds:.0f}s after capture started; "
+                "stopping replay and moving on."
+            )
+            replay_process.terminate()
+            try:
+                return replay_process.wait(timeout=10), True
+            except subprocess.TimeoutExpired:
+                replay_process.kill()
+                return replay_process.wait(), True
+
+        time.sleep(2)
+
+
 def run_pipeline(args):
     """
     Runs the Openpilot replay tool and modeld detection script concurrently.
@@ -74,7 +125,7 @@ def run_pipeline(args):
     # Hardcoded configuration (formerly general args)
     openpilot_dir = PROJECT_ROOT.parent / "openpilot"
     python_cmd = None
-    new_terminal_modeld = True
+    new_terminal_modeld = args.new_terminal_modeld
     new_terminal_replay = False
     dry_run = False
 
@@ -163,6 +214,8 @@ def run_pipeline(args):
     )
     if new_terminal_modeld:
         print("Modeld will run in a NEW TERMINAL window.")
+    else:
+        print("Modeld will run as a managed background process.")
     if new_terminal_replay:
         print("Replay will run in a NEW TERMINAL window.")
     print("="*40)
@@ -222,8 +275,14 @@ def run_pipeline(args):
                  print("Falling back to same-terminal execution.")
                  subprocess.run(replay_cmd, check=True, cwd=op_dir)
         else:
-            # Run from op_dir
-            subprocess.run(replay_cmd, check=True, cwd=op_dir)
+            replay_process = subprocess.Popen(replay_cmd, cwd=op_dir)
+            returncode, stopped_for_idle = wait_for_replay_or_dataset_idle(
+                replay_process=replay_process,
+                dataset_dir=dataset_dir,
+                idle_seconds=args.auto_stop_idle_seconds,
+            )
+            if returncode != 0 and not stopped_for_idle:
+                raise subprocess.CalledProcessError(returncode, replay_cmd)
             
     except subprocess.CalledProcessError as e:
         print(f"Replay tool failed with exit code {e.returncode}")
@@ -266,6 +325,10 @@ if __name__ == "__main__":
                         help="Target dataset capture FPS for raw/telemetry/features (default: 10.0)")
     parser.add_argument("--modeld-path", type=str, default="selfdrive/modeld/modeld_detection_second.py",
                         help="Path to modeld script (default: selfdrive/modeld/modeld_detection_second.py)")
+    parser.add_argument("--auto-stop-idle-seconds", type=float, default=45.0,
+                        help="Stop replay after this many seconds with no new raw frames once capture starts (default: 45). Use 0 to disable.")
+    parser.add_argument("--new-terminal-modeld", action="store_true",
+                        help="Run modeld in a separate terminal for debugging. This disables managed shutdown.")
 
 
 
