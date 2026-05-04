@@ -161,10 +161,24 @@ Create the prediction video with `pipeline/create_alpamayo_video.py`:
 ```
 
 ---
-### Alpamayo Project Tools
+### Tooling
 
-We added project-specific Alpamayo tooling for MiLa route datasets:
+We added project-specific tooling for MiLa route datasets:
 
 - `alpamayo/src/alpamayo1_5/load_custom_dataset.py` loads our `datasets/route_*/segment_*` folders into Alpamayo's expected camera, telemetry, history, and future trajectory format.
 - `alpamayo/batch_export_inference.py` runs batch Alpamayo inference and writes per-frame prediction JSON with command, reasoning, ground truth path, and selected prediction path.
 - `alpamayo/notebooks/inference_nav_custom.ipynb` is the custom navigation notebook for testing route frames, navigation commands, prediction selection modes, and reasoning output.
+- `frame_extractor/extract_3cam_route.py` creates `raw_left`, `raw_front`, and `raw_right` camera folders from `cam0`, `cam1`, and `cam2` videos in `frame_extractor/videos/`.
+
+```bash
+python3 frame_extractor/extract_3cam_route.py \
+  --route route_3
+```
+
+Example route capture used for `datasets/route_3`:
+
+```bash
+./pipeline/route_caputure.py \
+  --route "d34c14daa88a1e86/00000019--ab71b8e01d" \
+  --dataset-dir datasets/route_3
+```
