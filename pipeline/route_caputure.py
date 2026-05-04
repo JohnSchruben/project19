@@ -134,7 +134,7 @@ def run_pipeline(args):
     if not op_dir.exists():
         print(f"ERROR: Openpilot directory not found at {op_dir}")
         print(f"Please ensure openpilot exists next to {PROJECT_ROOT}")
-        return
+        return 1
 
     # Paths (relative to openpilot_dir unless absolute)
     replay_path = Path(args.replay_path)
@@ -147,11 +147,23 @@ def run_pipeline(args):
 
     dataset_dir = resolve_project_path(args.dataset_dir).resolve()
 
-    # Check if tools exist
+    # Check if tools exist before starting any long-running process.
+    missing_tools = False
     if not replay_path.exists():
-        print(f"WARNING: Replay tool not found at {replay_path}. Ensure it is built.")
+        print(f"ERROR: Replay tool not found at {replay_path}")
+        print("Run setup_openpilot.sh or build Openpilot so tools/replay/replay exists.")
+        missing_tools = True
+    elif not os.access(replay_path, os.X_OK):
+        print(f"ERROR: Replay tool is not executable: {replay_path}")
+        missing_tools = True
+
     if not modeld_path.exists():
-        print(f"WARNING: Modeld script not found at {modeld_path}.")
+        print(f"ERROR: Modeld script not found at {modeld_path}")
+        print("Run setup_openpilot.sh so the custom modeld scripts are copied into Openpilot.")
+        missing_tools = True
+
+    if missing_tools:
+        return 1
 
     # Environment variables for modeld
     modeld_env = os.environ.copy()
@@ -222,7 +234,7 @@ def run_pipeline(args):
 
     if dry_run:
         print("Dry run complete. Exiting.")
-        return
+        return 0
 
     # Start modeld
     modeld_process = None
@@ -252,7 +264,7 @@ def run_pipeline(args):
             )
         except Exception as e:
             print(f"Error starting modeld: {e}")
-            return
+            return 1
 
     # Give modeld a moment to initialize
     time.sleep(2)
@@ -286,8 +298,13 @@ def run_pipeline(args):
             
     except subprocess.CalledProcessError as e:
         print(f"Replay tool failed with exit code {e.returncode}")
+        return 1
+    except OSError as e:
+        print(f"Error starting replay: {e}")
+        return 1
     except KeyboardInterrupt:
         print("\nInterrupted by user.")
+        return 130
     finally:
         # Terminate modeld when replay finishes or is interrupted
         if modeld_process:
@@ -303,6 +320,8 @@ def run_pipeline(args):
             print("Please close that window manually if it remains open.")
             
         print("Pipeline finished.")
+
+    return 0
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run Openpilot Replay and Modeld Pipeline")
@@ -337,4 +356,4 @@ if __name__ == "__main__":
     # Ensure dataset directory exists
     resolve_project_path(args.dataset_dir).mkdir(parents=True, exist_ok=True)
 
-    run_pipeline(args)
+    sys.exit(run_pipeline(args))
