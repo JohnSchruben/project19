@@ -39,6 +39,22 @@ Side Task: We will program an automatic data preparation pipeline for autonomous
 1. Download and install the technologies listed above from their sources.
 2. Clone the repo to your local machine.
 3. See instuctions below for the pipeline.
+
+### Tests
+
+Run the lightweight unit tests from the repo root:
+
+```bash
+python3 run_tests.py
+```
+
+Check installed setup dependencies with:
+
+```bash
+python3 run_tests.py --dependencies
+```
+
+The default tests do not require Openpilot, CVAT, CUDA, or Alpamayo weights.
 ---
 ### Roadmap
 Sprint 1
