@@ -100,6 +100,10 @@ Run the two setup scripts from the repo root:
 ./setup_alpamayo_env.sh
 ```
 
+#### CVAT Setup
+
+CVAT setup instructions are in `CVAT_setup/`. Start with `CVAT_setup/README.md` for Docker, CVAT, Nuclio, and YOLO automatic annotation setup, and see `CVAT_setup/CVAT_Manual_Annotations_Guide.pdf` for manual annotation instructions.
+
 #### Full Pipeline
 
 Use `run_full_pipeline.sh` to generate a dataset and run the main processing steps:
