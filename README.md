@@ -1,4 +1,4 @@
-# Group G Capstone Project19
+# Group G Capstone Project19 - CS-4273-001 Spring 2026
 ### Team Members
 - Dasanie Le (Sprint Master)
 - Trevor Lietch (QA)
@@ -24,14 +24,39 @@ Side Task: We will program an automatic data preparation pipeline for autonomous
 5. Data export for training (annotated data filtering based on different training needs): Allow user to easily filter the data of interest based on labels.
 ---
 ### Technologies Used
-- Python - programming language for development
-- Ollama - open-source tool for running LLMs locally
-- Alpamayo - NVIDIA's AI model for self driving
+- Python / pip - pipeline scripts, dataset import, notebooks, and utility tooling
+- Bash - setup scripts and full pipeline orchestration
+- MiLa Openpilot / Openpilot replay - route playback and dashcam data capture
+- NVIDIA Alpamayo - trajectory prediction, navigation commands, and reasoning output
+- Hugging Face - Alpamayo model access and downloads
+- CUDA 12.4 + NVIDIA GPU - accelerated Alpamayo inference, with at least 40 GB VRAM recommended
+- CVAT + Docker - automatic annotation review and manual label correction
+- YOLO / Ultralytics - local object detection annotation export
+- SQLite - `pipeline/annotations.db` storage for frames, annotations, predictions, commands, and reasoning
+- Jupyter notebooks - querying and visualizing route data, annotations, and prediction paths
 
 ### Setup Instructions
 1. Download and install the technologies listed above from their sources.
 2. Clone the repo to your local machine.
 3. See instuctions below for the pipeline.
+
+### Tests
+
+Run the lightweight tests from the repo root:
+
+```bash
+python3 run_tests.py
+```
+
+This covers pipeline helpers, database CRUD/export, prediction import, route capture frame counting, and Alpamayo navigation-command logic.
+
+Check installed setup dependencies with:
+
+```bash
+python3 run_tests.py --dependencies
+```
+
+The default tests do not require Openpilot, CVAT, CUDA, or Alpamayo weights.
 ---
 ### Roadmap
 Sprint 1
@@ -61,65 +86,93 @@ Sprint 4
 ---
 ### MiLa Openpilot Data Generation
 
-We have integrated the data generation workflow from [Openpilot_Custom](https://github.com/OUMiLa/Openpilot_Custom). This involves a **Data Capture** step (requires Openpilot on Linux).
+All generated route data is written into `datasets/` folders, then imported into `pipeline/annotations.db` for training.
+We use MiLa/Openpilot routes to create dataset folders, run Alpamayo inference, annotate frames, and query the results.
 
-#### 1. Setup Openpilot (on Linux)
+#### Setup
 
-**Prerequisites:**
-- it has to run on ubuntu 
-- you need to install git and pip
-- You must have `project19` in your home directory (e.g., `~/project19`).
-- `openpilot` will be cloned into `~/openpilot` by the setup script.
+Requirements: Hugging Face account/token registered for model downloads, CUDA 12.4, an NVIDIA GPU with at least 40 GB VRAM, Ubuntu/Linux for Openpilot, Git, Python/pip, Docker for CVAT, and enough disk space for routes, frames, model weights, and generated videos.
 
-**Steps:**
-
-1.  **Run Setup Script:**
-    From your `project19` directory, run the setup script:
-    ```bash
-    cd ~/project19
-    chmod +x setup_openpilot.sh
-    ./setup_openpilot.sh
-    ```
-    This will:
-    - Clone `openpilot` to `~/openpilot` (if it doesn't exist) and checkout `v0.9.8`.
-    - Clone `Depth-Anything-V2` to `~/openpilot/DepV2` and install dependencies.
-    - Copy the custom `modeld` files into `~/openpilot/selfdrive/modeld/`.
-
-2.  **Setup Openpilot Environment:**
-    Go to the `openpilot` directory and run the ubuntu setup script:
-    ```bash
-    cd ~/openpilot
-    tools/ubuntu_setup.sh
-    ```
-    *Note: You may need to restart your shell or log out/in after this step.*
-
-3.  **Build Openpilot:**
-    Build openpilot using `scons`:
-    ```bash
-    # Ensure you are back in the openpilot directory
-    cd ~/openpilot
-    scons -u -j$(nproc)
-    ```
-
-#### 2. Run Data Capture Pipeline
-
-From the `project19` directory, use the pipeline runner script:
+Run the two setup scripts from the repo root:
 
 ```bash
-cd ~/project19
-python3 run_pipeline.py --route "d34c14daa88a1e86/000000ca--7c5d326170"
+./setup_openpilot.sh
+./setup_alpamayo_env.sh
 ```
 
-This will:
-1.  Run the openpilot `replay` tool on the specified route.
-2.  Run the custom `modeld` script to capture images and features to `datasets/`.
+#### Full Pipeline
 
-See `Openpilot_Custom/docs/DATA_PREPARATION_GUIDE.md` for more details on the data structure and next steps (labeling).
+Use `run_full_pipeline.sh` to generate a dataset and run the main processing steps:
 
-#### 3. Run Automatic Data Labeling
+```bash
+./run_full_pipeline.sh \
+  --openpilot-route "d34c14daa88a1e86/000000ca--7c5d326170" \
+  datasets/route_1
+```
 
-See `CVAT_setup\README.md` for instructions on how to complete this step.
+#### Annotations
 
-#### 4. Data Label Manual Correction
+Edit annotations in CVAT. CVAT setup and manual annotation instructions are in `CVAT_setup/`, including `CVAT_Manual_Annotations_Guide.pdf`.
 
-See `CVAT_Manual_Annotations_Guide.pdf` for instructions on how to complete this step.
+#### Querying Data
+
+Use `pipeline/database_explorer.ipynb` to inspect images, annotations, commands, reasoning, and prediction paths.
+
+#### Individual Steps
+
+Each step can also be run with the scripts in `pipeline/`. Most scripts accept either a whole route folder like `datasets/route_1` or one segment like `datasets/route_1/segment_00`.
+
+Capture Openpilot route data with `pipeline/route_caputure.py`:
+
+```bash
+./pipeline/route_caputure.py \
+  --route "d34c14daa88a1e86/000000ca--7c5d326170" \
+  --dataset-dir datasets/route_1
+```
+
+By default this moves on after capture starts and no new raw frames appear for 45 seconds. Use `--auto-stop-idle-seconds 0` to wait forever, or `--new-terminal-modeld` to debug modeld in a separate terminal.
+
+Run local YOLO annotation export with `pipeline/annotate_route.py`:
+
+```bash
+./pipeline/annotate_route.py datasets/route_1
+./pipeline/annotate_route.py datasets/route_1/segment_00
+```
+
+Run Alpamayo prediction JSON export with `pipeline/run_alpamayo.py`:
+
+```bash
+./pipeline/run_alpamayo.py datasets/route_1
+./pipeline/run_alpamayo.py datasets/route_1/segment_00
+```
+
+Import annotations and predictions into SQLite with `pipeline/import_route_db.py`:
+
+```bash
+./pipeline/import_route_db.py datasets/route_1 --overwrite
+./pipeline/import_route_db.py datasets/route_1/segment_00 --overwrite
+```
+
+Create the prediction video with `pipeline/create_alpamayo_video.py`:
+
+```bash
+./pipeline/create_alpamayo_video.py datasets/route_1
+./pipeline/create_alpamayo_video.py datasets/route_1/segment_00
+```
+
+---
+### Tooling
+
+We added project-specific tooling for MiLa route datasets:
+
+- `alpamayo/src/alpamayo1_5/load_custom_dataset.py` loads our `datasets/route_*/segment_*` folders into Alpamayo's expected camera, telemetry, history, and future trajectory format.
+- `alpamayo/batch_export_inference.py` runs batch Alpamayo inference and writes per-frame prediction JSON with command, reasoning, ground truth path, and selected prediction path.
+- `alpamayo/notebooks/inference_nav_custom.ipynb` is the custom navigation notebook for testing route frames, navigation commands, prediction selection modes, and reasoning output.
+- `frame_extractor/extract_3cam_route.py` creates `raw_left`, `raw_front`, and `raw_right` camera folders from `cam0`, `cam1`, and `cam2` videos in `frame_extractor/videos/`.
+
+If you are running the pipeline for this route d34c14daa88a1e86/00000019--ab71b8e01d, you can add the additional camera frames by adding the .mp4 files to the `frame_extractor/videos/` folder. Then run the frame extractor script. 
+```bash
+python3 frame_extractor/extract_3cam_route.py \
+  --route route_3
+```
+

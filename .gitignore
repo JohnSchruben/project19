@@ -206,6 +206,29 @@ orleans.codegen.cs
 
 # Python (since I saw some .py files)
 __pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+**/.venv/
+.pytest_cache/
+**/.pytest_cache/
+tests/.tmp/
+tmp*/
+pipeline/.ipynb_checkpoints/
 
 # Openpilot datasets
 datasets/
+
+# Model weights
+yolov8s.pt
+
+# Local generated state
+alpamayo/uv.lock
+pipeline/annotations.db
+
+# Videos
+videos/
+*.mp4
+frame_extractor/videos/
+frame_extractor/extracted_frames/

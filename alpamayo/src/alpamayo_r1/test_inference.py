@@ -17,9 +17,6 @@
 # This script loads a dataset, runs inference, and computes the minADE.
 # It can be used to test the inference pipeline.
 
-import torch
-import numpy as np
-
 from alpamayo_r1.models.alpamayo_r1 import AlpamayoR1
 from alpamayo_r1.load_physical_aiavdataset import load_physical_aiavdataset
 from alpamayo_r1 import helper
@@ -32,7 +29,7 @@ data = load_physical_aiavdataset(clip_id, t0_us=5_100_000)
 print("Dataset loaded.")
 messages = helper.create_message(data["image_frames"].flatten(0, 1))
 
-model = AlpamayoR1.from_pretrained("nvidia/Alpamayo-R1-10B", dtype=torch.bfloat16).to("cuda")
+model = AlpamayoR1.from_pretrained("nvidia/Alpamayo-1.5-10B", dtype=torch.bfloat16).to("cuda")
 processor = helper.get_processor(model.tokenizer)
 
 inputs = processor.apply_chat_template(

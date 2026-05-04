@@ -9,6 +9,12 @@ CUSTOM_MODELD_DIR="Openpilot_Custom/openpilot_files/selfdrive"
 # Ensure .local/bin is in PATH for uv
 export PATH="$HOME/.local/bin:$PATH"
 
+echo "Refreshing apt package lists..."
+sudo apt-get update --fix-missing
+if [ $? -ne 0 ]; then
+    echo "Warning: apt-get update failed. Openpilot setup may still fail if package lists are stale."
+fi
+
 # Check if openpilot directory exists
 if [ ! -d "$OPENPILOT_DIR" ]; then
     echo "Openpilot directory not found at $OPENPILOT_DIR"
@@ -51,8 +57,15 @@ fi
 echo "Running ubuntu setup script..."
 tools/ubuntu_setup.sh
 if [ $? -ne 0 ]; then
-    echo "Error running ubuntu_setup.sh. Please install dependencies manually."
-    exit 1
+    echo "ubuntu_setup.sh failed. Refreshing apt package lists and retrying once..."
+    sudo apt-get update --fix-missing
+    tools/ubuntu_setup.sh
+    if [ $? -ne 0 ]; then
+        echo "Error running ubuntu_setup.sh. Please install dependencies manually."
+        echo "Try: sudo apt-get update --fix-missing"
+        echo "Then rerun: ./setup_openpilot.sh"
+        exit 1
+    fi
 fi
 
 # Install OpenCL support for VM (pocl)

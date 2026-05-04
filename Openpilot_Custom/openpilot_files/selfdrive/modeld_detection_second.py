@@ -19,6 +19,7 @@ import queue
 import cereal.messaging as messaging
 from cereal import car, log
 from pathlib import Path
+from typing import Optional
 from setproctitle import setproctitle
 from cereal.messaging import PubMaster, SubMaster
 from msgq.visionipc import VisionIpcClient, VisionStreamType, VisionBuf
@@ -240,14 +241,8 @@ class ModelState:
 
     if prepare_only:
       return None
-    print(self.vision_inputs.keys())
-    print(self.vision_inputs['input_imgs'].shape, self.vision_inputs['big_input_imgs'].shape)
     self.vision_output = self.vision_run(**self.vision_inputs).numpy().flatten()
-    print(self.vision_output.shape)
-    print(type(self.vision_output))
     # cv2.imwrite(file_name, self.vision_output)
-    for key in self.policy_inputs.keys():
-      print(self.policy_inputs[key].shape)
     vision_outputs_dict = self.parser.parse_vision_outputs(self.slice_outputs(self.vision_output, self.vision_output_slices))
 
     self.full_features_buffer[0,:-1] = self.full_features_buffer[0,1:]
@@ -260,11 +255,8 @@ class ModelState:
     # cv2.imwrite(file_name2, bgr)
     self.full_features_buffer[0,-1] = vision_outputs_dict['hidden_state'][0, :]
     self.numpy_inputs['features_buffer'][:] = self.full_features_buffer[0, self.temporal_idxs]
-    print(self.policy_inputs.keys())
 
     self.policy_output = self.policy_run(**self.policy_inputs).numpy().flatten()
-    print("runs here !!!!!!!!!!!")
-    print(self.policy_output.shape)
     policy_outputs_dict = self.parser.parse_policy_outputs(self.slice_outputs(self.policy_output, self.policy_output_slices))
 
     # TODO model only uses last value now
@@ -291,8 +283,32 @@ def background_saver(save_queue):
                 json.dump(task["data"], f, indent=2)
         elif task_type == "image":
             cv2.imwrite(task["filepath"], task["data"])
-            
+             
         save_queue.task_done()
+
+
+def load_last_saved_timestamp_eof(seg_dir: str) -> Optional[int]:
+  """Read the most recent saved telemetry timestamp for resume-aware dataset cadence."""
+  telemetry_dir = os.path.join(seg_dir, "telemetry")
+  if not os.path.isdir(telemetry_dir):
+    return None
+
+  json_files = sorted(name for name in os.listdir(telemetry_dir) if name.endswith(".json"))
+  if not json_files:
+    return None
+
+  last_file = os.path.join(telemetry_dir, json_files[-1])
+  try:
+    with open(last_file, "r") as f:
+      data = json.load(f)
+  except Exception:
+    return None
+
+  if "timestamp_eof" in data:
+    return int(data["timestamp_eof"])
+  if "timestamp_seconds" in data:
+    return int(float(data["timestamp_seconds"]) * 1e9)
+  return None
 
 def main(demo=False):
   cloudlog.warning("modeld init")
@@ -371,10 +387,12 @@ def main(demo=False):
   # In live driving, frameId is monotonic and segment stays 0.
   # In replay/log workflows, frameId often resets at segment boundaries; we use that to increment segment.
   base_out_dir = os.environ.get("MODELD_DATASET_DIR", "./test_dataset")
-  max_segment = int(os.environ.get("MODELD_MAX_SEGMENT", "11"))  # save segments 0..11 by default
+  max_segment = int(os.environ.get("MODELD_MAX_SEGMENT", "20"))  # save segments 0..20 by default
   # Optional: force segmentation by frame count (useful when replay doesn't reset frameId between segments).
   # Openpilot route segments are typically ~60s; at ~20 FPS that is ~1200 frames.
   segment_frames = int(os.environ.get("MODELD_SEGMENT_FRAMES", "0"))  # 0 disables
+  dataset_target_fps = float(os.environ.get("MODELD_DATASET_TARGET_FPS", "10.0"))
+  dataset_interval_ns = 0 if dataset_target_fps <= 0 else int(round(1e9 / dataset_target_fps))
   # When capturing datasets, skipping eval on dropped frames can result in no files being written.
   # Set MODELD_DATASET_FORCE_EVAL=0 to restore original behavior.
   dataset_force_eval = os.environ.get("MODELD_DATASET_FORCE_EVAL", "1") != "0"
@@ -382,6 +400,7 @@ def main(demo=False):
   # and continue frame numbering to avoid overwriting existing data.
   segment_idx = 0
   segment_frame_count = 0
+  last_saved_timestamp_eof = None
   try:
     if os.path.isdir(base_out_dir):
       segs = []
@@ -403,9 +422,17 @@ def main(demo=False):
               segment_frame_count = last + 1
             except Exception:
               segment_frame_count = len(pngs)
+          last_saved_timestamp_eof = load_last_saved_timestamp_eof(
+            os.path.join(base_out_dir, f"segment_{segment_idx:02d}")
+          )
         cloudlog.warning(f"Resuming dataset capture at segment_{segment_idx:02d} frame {segment_frame_count:06d}")
   except Exception as e:
     cloudlog.warning(f"Resume scan failed, starting fresh: {e}")
+
+  cloudlog.warning(
+    f"Dataset capture target FPS: {dataset_target_fps:.3f} "
+    f"(interval {dataset_interval_ns} ns, segment_frames={segment_frames})"
+  )
 
   last_road_frame_id = None
 
@@ -442,6 +469,20 @@ def main(demo=False):
       # Use single camera
       buf_extra = buf_main
       meta_extra = meta_main
+
+    sm.update(0)
+    desire = DH.desire
+    is_rhd = sm["driverMonitoringState"].isRHD
+    frame_id = sm["roadCameraState"].frameId
+    v_ego = max(sm["carState"].vEgo, 0.)
+    lateral_control_params = np.array([v_ego, steer_delay], dtype=np.float32)
+    if sm.updated["liveCalibration"] and sm.seen['roadCameraState'] and sm.seen['deviceState']:
+      device_from_calib_euler = np.array(sm["liveCalibration"].rpyCalib, dtype=np.float32)
+      dc = DEVICE_CAMERAS[(str(sm['deviceState'].deviceType), str(sm['roadCameraState'].sensor))]
+      model_transform_main = get_warp_matrix(device_from_calib_euler, dc.ecam.intrinsics if main_wide_camera else dc.fcam.intrinsics, False).astype(np.float32)
+      model_transform_extra = get_warp_matrix(device_from_calib_euler, dc.ecam.intrinsics, True).astype(np.float32)
+      live_calib_seen = True
+
     # Auto-advance segment when roadCameraState.frameId resets (common in segment-based replay).
     if last_road_frame_id is not None and frame_id < last_road_frame_id:
       segment_idx += 1
@@ -460,24 +501,20 @@ def main(demo=False):
       cloudlog.warning(f"Reached max segment {max_segment}. Stopping dataset capture.")
       break
 
+    should_save_frame = (
+      dataset_interval_ns <= 0
+      or last_saved_timestamp_eof is None
+      or meta_main.timestamp_eof >= last_saved_timestamp_eof + dataset_interval_ns
+    )
+    if not should_save_frame:
+      last_vipc_frame_id = meta_main.frame_id
+      continue
+
     seg_dir = os.path.join(base_out_dir, f"segment_{segment_idx:02d}")
     raw_dir = os.path.join(seg_dir, "raw")
     feat_dir = os.path.join(seg_dir, "features")
     os.makedirs(raw_dir, exist_ok=True)
     os.makedirs(feat_dir, exist_ok=True)
-
-    sm.update(0)
-    desire = DH.desire
-    is_rhd = sm["driverMonitoringState"].isRHD
-    frame_id = sm["roadCameraState"].frameId
-    v_ego = max(sm["carState"].vEgo, 0.)
-    lateral_control_params = np.array([v_ego, steer_delay], dtype=np.float32)
-    if sm.updated["liveCalibration"] and sm.seen['roadCameraState'] and sm.seen['deviceState']:
-      device_from_calib_euler = np.array(sm["liveCalibration"].rpyCalib, dtype=np.float32)
-      dc = DEVICE_CAMERAS[(str(sm['deviceState'].deviceType), str(sm['roadCameraState'].sensor))]
-      model_transform_main = get_warp_matrix(device_from_calib_euler, dc.ecam.intrinsics if main_wide_camera else dc.fcam.intrinsics, False).astype(np.float32)
-      model_transform_extra = get_warp_matrix(device_from_calib_euler, dc.ecam.intrinsics, True).astype(np.float32)
-      live_calib_seen = True
 
     traffic_convention = np.zeros(2)
     traffic_convention[int(is_rhd)] = 1
@@ -506,13 +543,14 @@ def main(demo=False):
       'desire': vec_desire,
       'traffic_convention': traffic_convention,
       'lateral_control_params': lateral_control_params,
-      }
+    }
 
     mt1 = time.perf_counter()
     mid = f"{segment_frame_count:06d}"
     img_feature_name = os.path.join(feat_dir, mid + ".png")
     bgr = recover_img(buf_main, os.path.join(raw_dir, mid + ".png"))
     img_name = os.path.join(raw_dir, mid + ".png")
+    last_saved_timestamp_eof = meta_main.timestamp_eof
 
     # Log telemetry (speed, steering) for dataset use
     tel_dir = os.path.join(seg_dir, "telemetry")
@@ -553,6 +591,11 @@ def main(demo=False):
         "filepath": telemetry_file,
         "data": telemetry_data
     })
+    save_queue.put({
+        "type": "image",
+        "filepath": img_name,
+        "data": bgr
+    })
     
     # We still need to run the model; but modify model.run below or bypass inline saves if any
     # (Note: we modified model.run's side effects to instead return values, or we'll wrap it)
@@ -564,11 +607,6 @@ def main(demo=False):
             "type": "image",
             "filepath": img_feature_name,
             "data": model_output['hidden_state'][0, :]
-        })
-        save_queue.put({
-            "type": "image",
-            "filepath": img_name,
-            "data": bgr
         })
     
     # mt2 = time.perf_counter()
