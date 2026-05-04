@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Run Alpamayo batch export from the pipeline folder or project root.
+Run Alpamayo batch inference from the pipeline folder or project root.
 
 Examples:
   python3 pipeline/run_alpamayo.py datasets/route_1
@@ -23,7 +23,7 @@ ALPAMAYO_BATCH_EXPORT = PROJECT_ROOT / "alpamayo" / "batch_export_inference.py"
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run Alpamayo batch_export_inference.py for a route or segment."
+        description="Run Alpamayo batch_export_inference.py for a route or segment. Writes prediction JSON only."
     )
     parser.add_argument("target", help="Route folder or segment folder")
     parser.add_argument(

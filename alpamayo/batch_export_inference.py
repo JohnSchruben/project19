@@ -12,7 +12,7 @@ def get_default_route():
         return dirs[0]
     return None
 
-parser = argparse.ArgumentParser(description="Headless batch video exporter with Alpamayo inference.")
+parser = argparse.ArgumentParser(description="Headless Alpamayo batch inference JSON exporter.")
 parser.add_argument("--route", type=str, default=get_default_route(), 
                     help="Path to a route directory containing segments")
 parser.add_argument("--frames", type=int, default=64, 
@@ -35,18 +35,13 @@ parser.add_argument("--cameras", nargs="+", choices=["wide", "left", "right", "f
 parser.add_argument("--max-gen-length", type=int, default=256,
                     help="Maximum generation length for the trajectory diffusion model. Lower speeds it up but reduces max distance.")
 parser.add_argument("--plot-all-samples", action="store_true",
-                    help="Plot all trajectory samples instead of just the selected best path")
+                    help="Deprecated compatibility flag. Videos are rendered later from saved prediction JSON.")
 global_args = parser.parse_args()
 
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 import numpy as np
-import cv2
 import torch
-import re
 import signal
-from PIL import Image
-import matplotlib.pyplot as plt
-import textwrap
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
 
@@ -54,19 +49,6 @@ from alpamayo1_5.load_custom_dataset import load_custom_dataset
 from alpamayo1_5.navigation_command import infer_navigation_command
 from alpamayo1_5 import helper
 from alpamayo1_5.models.alpamayo1_5 import Alpamayo1_5
-
-
-TURN_COLOR_MAP = {
-    "Ground Truth": "red",
-    "Nav Command": "lime",
-    "Command": "lime",
-    "Sample": "gray",
-}
-
-DATASET_FPS = 10.0
-OUTPUT_FPS = 40.0
-
-import signal
 
 
 def extract_cot(extra, idx=0):
@@ -88,13 +70,6 @@ def extract_cot(extra, idx=0):
         return str(cot_data).strip()
     except Exception:
         return ""
-
-
-def nav_label(nav_cmd: str) -> str:
-    nav_lower = nav_cmd.lower()
-    if "left" in nav_lower or "right" in nav_lower or "straight" in nav_lower:
-        return "Nav Command"
-    return "Command"
 
 
 def run_nav_inference(
@@ -149,23 +124,6 @@ def run_nav_inference(
     return pred_xyz_nav, pred_rot_nav, extra_nav
 
 
-def select_prediction_xy(
-    pred_tensor,
-    nav_cmd: str,
-    num_frames: int,
-    selection_mode: str = "heuristic",
-) -> tuple[np.ndarray, np.ndarray, int, int]:
-    selected, n_frames, sample_idx, _ = select_prediction_path(
-        pred_tensor,
-        nav_cmd,
-        num_frames,
-        selection_mode=selection_mode,
-    )
-    pred_x = np.concatenate(([0.0], selected[:n_frames, 0]))
-    pred_y = np.concatenate(([0.0], selected[:n_frames, 1]))
-    return pred_x, pred_y, n_frames, sample_idx
-
-
 def select_prediction_path(
     pred_tensor,
     nav_cmd: str,
@@ -209,10 +167,6 @@ def select_prediction_path(
 
     n_frames = min(num_frames, selected.shape[0])
     return selected[:n_frames], n_frames, sample_idx, pred_np
-
-
-def plot_dotted_path(ax, xs: np.ndarray, ys: np.ndarray, color: str, label: str):
-    ax.plot([-y for y in ys], xs, marker='o', color=color, linewidth=2.0, label=label)
 
 
 def path_to_records(path: np.ndarray) -> list[dict]:
@@ -271,6 +225,7 @@ def save_prediction_json(
         "clip_id": data.get("clip_id"),
         "t0_us": data.get("t0_us"),
         "nav_command": nav_cmd,
+        "command": cmd_text,
         "command_text": cmd_text,
         "command_source": "ground_truth_heuristic",
         "selection_mode": args.selection_mode,
@@ -281,6 +236,7 @@ def save_prediction_json(
         "frames_requested": int(args.frames),
         "frames_stored": int(n_frames),
         "cameras": args.cameras,
+        "reasoning_text": cot,
         "reasoning": cot,
         "selected_path": path_to_records(selected_path),
         "ground_truth_path": path_to_records(gt_xyz[:n_frames]),
@@ -295,10 +251,10 @@ def save_prediction_json(
 def main():
     args = global_args
     
-    # Safe interrupt flag to gracefully finish the current frame and save the video seamlessly
+    # Safe interrupt flag to gracefully finish the current frame.
     interrupt_flag = [False]
     def graceful_exit(sig, frame):
-        print("\n\n[Stop Signal Detected] Finishing the current frame and cleanly saving video, please wait...")
+        print("\n\n[Stop Signal Detected] Finishing the current frame, please wait...")
         interrupt_flag[0] = True
     signal.signal(signal.SIGINT, graceful_exit)
     signal.signal(signal.SIGTERM, graceful_exit)
@@ -308,7 +264,6 @@ def main():
         return
 
     cam_mapping = {"left": 0, "wide": 1, "right": 2, "front": 6}
-    frame_repeat = max(1, int(round(OUTPUT_FPS / DATASET_FPS)))
     excluded_cameras = []
     for name, idx in cam_mapping.items():
         if name not in args.cameras:
@@ -383,83 +338,20 @@ def main():
             )
             continue
         
-        route_name = os.path.basename(os.path.abspath(args.route))
-        if start_frame == 0 and end_frame == num_frames_seg - 1:
-            output_video_path = f"{seg_name}_{route_name}_inference.mp4"
-        else:
-            output_video_path = f"{seg_name}_{route_name}_inference_{start_frame:06d}_{end_frame:06d}.mp4"
-        out = None
-        
-        fig_export = plt.figure(figsize=(4, 4), dpi=100)
-        
-        def signal_handler(sig, frame):
-            print("\nInference stopped by user. Saving current video progress...")
-            if out is not None:
-                out.release()
-                print(f"Saved partial export for {output_video_path}")
-            if fig_export is not None:
-                plt.close(fig_export)
-            sys.exit(0)
-            
-        signal.signal(signal.SIGINT, signal_handler)
-        
-        ax_export = fig_export.add_subplot(111)
-        overlay_size = (300, 300)
-
         print(
             f"Processing frames {start_frame} through {end_frame} "
             f"(inclusive) out of 0-{num_frames_seg - 1}."
         )
 
+        route_name = os.path.basename(os.path.abspath(args.route))
         for local_idx in range(start_frame, end_frame + 1):
             if interrupt_flag[0]:
                 break
-            
-            single_camera_mode = len(args.cameras) == 1
-            
-            def load_cam_img(cam_dir_name, tw, th):
-                cam_dir = os.path.join(seg_dir, cam_dir_name)
-                img_path_png = os.path.join(cam_dir, f"{local_idx:06d}.png")
-                img_path_jpg = os.path.join(cam_dir, f"{local_idx:06d}.jpg")
-                img_path = img_path_png if os.path.exists(img_path_png) else (img_path_jpg if os.path.exists(img_path_jpg) else None)
-                if img_path:
-                    img = np.array(Image.open(img_path).convert('RGB'))
-                else:
-                    img = np.zeros((th, tw, 3), dtype=np.uint8)
-                if img.shape[:2] != (th, tw):
-                    img = cv2.resize(img, (tw, th))
-                cv2.putText(img, cam_dir_name, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
-                return img
-
-            if single_camera_mode:
-                target_w, target_h = 1280, 960
-                
-                cam_name = "raw"
-                if "front" in args.cameras: cam_name = "raw_front"
-                elif "left" in args.cameras: cam_name = "raw_left"
-                elif "right" in args.cameras: cam_name = "raw_right"
-                
-                img_np = load_cam_img(cam_name, target_w, target_h)
-            else:
-                # Construct 2x2 grid of images for the background
-                target_w, target_h = 640, 480
-                img_np = np.zeros((target_h * 2, target_w * 2, 3), dtype=np.uint8)
-                
-                img_np[0:target_h, 0:target_w] = load_cam_img("raw", target_w, target_h)           # Top Left
-                img_np[target_h:target_h*2, 0:target_w] = load_cam_img("raw_left", target_w, target_h) # Bottom Left
-                img_np[target_h:target_h*2, target_w:target_w*2] = load_cam_img("raw_right", target_w, target_h) # Bottom Right
-
-            if out is None:
-                h, w, _ = img_np.shape
-                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-                out = cv2.VideoWriter(output_video_path, fourcc, OUTPUT_FPS, (w, h))
 
             try:
                 data = load_custom_dataset(seg_dir, local_idx, exclude_cameras=excluded_cameras)
             except Exception as e:
                 print(f"Error loading data for {seg_name} frame {local_idx}: {e}")
-                if out is not None:
-                    out.write(cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR))
                 continue
 
             gt_xyz = data["ego_future_xyz"][0, 0].numpy()
@@ -469,8 +361,6 @@ def main():
             # Set fixed seed to match the nav notebook exactly for deterministic conditional inference
             torch.cuda.manual_seed_all(42)
 
-            nav_runs = []
-            overlay_summary = ""
             cot = ""
             pred_xyz_nav, _, extra_nav = run_nav_inference(
                 model=model,
@@ -482,21 +372,9 @@ def main():
                 guidance_weight=args.guidance_weight,
                 max_gen_length=args.max_gen_length,
             )
-            nav_runs.append((nav_label(nav_cmd), nav_cmd, pred_xyz_nav, extra_nav))
-            overlay_summary = f"Nav Command: {nav_cmd}"
 
-            # Plotting GT vs Pred
-            ax_export.clear()
-            pred_plot_data = []
-            max_common_frames = gt_xyz.shape[0]
-            for label, cmd_text, pred_xyz, extra in nav_runs:
-                pred_x, pred_y, pred_frames, sample_idx = select_prediction_xy(
-                    pred_xyz,
-                    cmd_text,
-                    args.frames,
-                    selection_mode=args.selection_mode,
-                )
-                selected_path, selected_frames, _, _ = select_prediction_path(
+            for cmd_text, pred_xyz, extra in [(nav_cmd, pred_xyz_nav, extra_nav)]:
+                selected_path, selected_frames, sample_idx, _ = select_prediction_path(
                     pred_xyz,
                     cmd_text,
                     args.frames,
@@ -531,119 +409,7 @@ def main():
                     n_frames=selected_frames,
                     data=data,
                 )
-                
-                if args.plot_all_samples:
-                    pred_np = pred_xyz.detach().cpu().numpy()[0, 0]
-                    for i in range(pred_np.shape[0]):
-                        selected = pred_np[i]
-                        n_f = min(args.frames, selected.shape[0])
-                        px = np.concatenate(([0.0], selected[:n_f, 0]))
-                        py = np.concatenate(([0.0], selected[:n_f, 1]))
-                        pred_plot_data.append(("Sample", px, py, n_f))
-
-                pred_plot_data.append((label, pred_x, pred_y, pred_frames))
-                max_common_frames = min(max_common_frames, pred_frames)
-
-            n_plot_frames = min(args.frames, max_common_frames)
-            gt_x = np.concatenate(([0.0], gt_xyz[:n_plot_frames, 0]))
-            gt_y = np.concatenate(([0.0], gt_xyz[:n_plot_frames, 1]))
-            plot_dotted_path(ax_export, gt_x, gt_y, TURN_COLOR_MAP["Ground Truth"], "Ground Truth")
-
-            for label, pred_x, pred_y, _ in pred_plot_data:
-                # If plotting background samples, make them thinner and distinct
-                is_sample = label == "Sample"
-                alpha = 0.4 if is_sample else 1.0
-                lw = 1.0 if is_sample else 2.0
-                ax_export.plot(
-                    [-y for y in pred_y[: n_plot_frames + 1]],
-                    pred_x[: n_plot_frames + 1],
-                    marker='o',
-                    color=TURN_COLOR_MAP.get(label, TURN_COLOR_MAP["Command"]),
-                    linewidth=lw,
-                    alpha=alpha,
-                    label=label if not is_sample else ""
-                )
-
-            ax_export.plot(0, 0, marker='*', color='black', markersize=15)
-            # Remove duplicate labels
-            handles, labels = ax_export.get_legend_handles_labels()
-            by_label = dict(zip(labels, handles))
-            ax_export.legend(by_label.values(), by_label.keys(), loc="best", fontsize=8)
-            ax_export.set_aspect('equal')
-            cur_xlim = ax_export.get_xlim()
-            cur_ylim = ax_export.get_ylim()
-            max_range = max(cur_xlim[1]-cur_xlim[0], cur_ylim[1]-cur_ylim[0], 10.0) / 2.0
-            x_c = (cur_xlim[1]+cur_xlim[0]) / 2.0
-            y_c = (cur_ylim[1]+cur_ylim[0]) / 2.0
-            ax_export.set_xlim(x_c - max_range, x_c + max_range)
-            ax_export.set_ylim(y_c - max_range, y_c + max_range)
-            ax_export.axis('off')
-            
-            # Draw text
-            font_face = cv2.FONT_HERSHEY_SIMPLEX
-            font_scale = 0.6  # smaller text
-            font_thickness = 1
-            
-            wrapped_cot = textwrap.wrap(f"Reasoning: {cot}", width=60)
-            
-            lines_to_draw = [
-                f"[{seg_name} | Frame {local_idx}]",
-                f"Cmd: {nav_cmd}",
-                ""
-            ] + wrapped_cot
-            
-            if single_camera_mode:
-                text_x = 20
-                text_y = 60
-            else:
-                text_x = target_w + 20
-                text_y = 40
-                
-            for line in lines_to_draw:
-                # Black outline for visibility
-                cv2.putText(img_np, line, (text_x, text_y), font_face, font_scale, (0, 0, 0), font_thickness + 2)
-                # White text
-                cv2.putText(img_np, line, (text_x, text_y), font_face, font_scale, (255, 255, 255), font_thickness)
-                text_y += 25
-            
-            fig_export.canvas.draw()
-            rgba = np.asarray(fig_export.canvas.buffer_rgba())
-            overlay_img = rgba[:, :, :3].copy()
-            
-            overlay_size = (340, 340)
-            overlay_img = cv2.resize(overlay_img, overlay_size)
-            
-            gray = cv2.cvtColor(overlay_img, cv2.COLOR_RGB2GRAY)
-            mask = cv2.threshold(gray, 240, 255, cv2.THRESH_BINARY_INV)[1]
-            
-            if single_camera_mode:
-                # Place graph in top right of the single image
-                roi_y1 = 40
-                roi_x1 = 1280 - overlay_size[0] - 40
-            else:
-                # Place graph in TOP RIGHT quadrant below the text
-                roi_y1 = max(140, text_y + 10)
-                roi_x1 = target_w + (target_w - overlay_size[0]) // 2
-                
-            roi_y2 = roi_y1 + overlay_size[1]
-            roi_x2 = roi_x1 + overlay_size[0]
-            
-            if roi_y2 <= img_np.shape[0] and roi_x2 <= img_np.shape[1]:
-                roi = img_np[roi_y1:roi_y2, roi_x1:roi_x2]
-                bg = cv2.bitwise_and(roi, roi, mask=cv2.bitwise_not(mask))
-                fg = cv2.bitwise_and(overlay_img, overlay_img, mask=mask)
-                img_np[roi_y1:roi_y2, roi_x1:roi_x2] = cv2.add(bg, fg)
-                
-            # Repeat each dataset frame so playback speed matches the source dataset FPS.
-            bgr_frame = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
-            for _ in range(frame_repeat):
-                out.write(bgr_frame)
-            
-        if out is not None:
-            out.release()
-            print(f"Finished exporting {output_video_path}")
-            
-        plt.close(fig_export)
+        print(f"Finished writing prediction JSON for {seg_name}.")
         
         if interrupt_flag[0]:
             print("Processing stopped early by user.")

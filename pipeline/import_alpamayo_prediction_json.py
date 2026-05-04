@@ -52,6 +52,7 @@ def ensure_tables(conn):
             annotation_id INTEGER REFERENCES annotations(id) ON DELETE SET NULL,
             model_name TEXT NOT NULL,
             nav_command TEXT NOT NULL,
+            command_text TEXT,
             nav_command_source TEXT NOT NULL,
             selection_mode TEXT NOT NULL,
             selected_sample_index INTEGER NOT NULL,
@@ -60,6 +61,7 @@ def ensure_tables(conn):
             max_generation_length INTEGER NOT NULL,
             frames_requested INTEGER NOT NULL,
             frames_stored INTEGER NOT NULL,
+            reasoning_text TEXT,
             cot TEXT,
             selected_path_json TEXT NOT NULL,
             all_samples_json TEXT,
@@ -83,7 +85,18 @@ def ensure_tables(conn):
             ON alpamayo_prediction_points(prediction_id);
         """
     )
+    ensure_column(conn, "alpamayo_predictions", "command_text", "TEXT")
+    ensure_column(conn, "alpamayo_predictions", "reasoning_text", "TEXT")
     conn.commit()
+
+
+def ensure_column(conn, table, column, column_type):
+    existing = {
+        row["name"]
+        for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
+    }
+    if column not in existing:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}")
 
 
 def load_prediction(path):
@@ -133,22 +146,25 @@ def insert_prediction(conn, frame_row, payload):
     selected_path = payload.get("selected_path", [])
     all_samples = payload.get("all_samples", [])
     gt_path = payload.get("ground_truth_path", [])
+    command_text = payload.get("command_text") or payload.get("command") or payload.get("nav_command", "")
+    reasoning_text = payload.get("reasoning_text") or payload.get("reasoning", "")
 
     cur = conn.execute(
         """
         INSERT INTO alpamayo_predictions (
-            frame_id, annotation_id, model_name, nav_command, nav_command_source,
+            frame_id, annotation_id, model_name, nav_command, command_text, nav_command_source,
             selection_mode, selected_sample_index, num_traj_samples, guidance_weight,
-            max_generation_length, frames_requested, frames_stored, cot,
+            max_generation_length, frames_requested, frames_stored, reasoning_text, cot,
             selected_path_json, all_samples_json, gt_path_json
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             frame_row["frame_id"],
             frame_row["annotation_id"],
             payload.get("model_name", "nvidia/Alpamayo-1.5-10B"),
             payload.get("nav_command", ""),
+            command_text,
             payload.get("command_source", "unknown"),
             payload.get("selection_mode", "heuristic"),
             int(payload.get("selected_sample_index", 0)),
@@ -157,7 +173,8 @@ def insert_prediction(conn, frame_row, payload):
             int(payload.get("max_generation_length", 0)),
             int(payload.get("frames_requested", len(selected_path))),
             int(payload.get("frames_stored", len(selected_path))),
-            payload.get("reasoning", ""),
+            reasoning_text,
+            reasoning_text,
             json.dumps(selected_path),
             json.dumps(all_samples),
             json.dumps(gt_path),
