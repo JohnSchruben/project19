@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import sqlite3
+import textwrap
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -220,6 +221,17 @@ class DatabaseExplorer:
             raise ValueError(f"No prediction_id={prediction_id}")
         return dict(row)
 
+    def prediction_command_text(self, pred: dict) -> str:
+        return (
+            pred.get("command_text")
+            or pred.get("command")
+            or pred.get("nav_command")
+            or ""
+        )
+
+    def prediction_reasoning_text(self, pred: dict) -> str:
+        return pred.get("reasoning_text") or pred.get("reasoning") or pred.get("cot") or ""
+
     def latest_prediction_id(self) -> int | None:
         if not self.table_exists("alpamayo_predictions"):
             return None
@@ -245,9 +257,11 @@ class DatabaseExplorer:
     def plot_prediction(self, prediction_id: int, show_gt: bool = True, show_image: bool = True):
         pred = self.load_prediction(prediction_id)
         pts = self.prediction_points(prediction_id)
+        command_text = self.prediction_command_text(pred)
+        reasoning_text = self.prediction_reasoning_text(pred)
 
         if show_image:
-            _, axes = plt.subplots(1, 2, figsize=(14, 6))
+            fig, axes = plt.subplots(1, 2, figsize=(14, 7))
             image_path = self.resolve_frame_path(pred["frame_id"])
             preview, label_file, classes_file = self.annotation_paths(image_path)
             if preview.exists():
@@ -260,7 +274,7 @@ class DatabaseExplorer:
             axes[0].axis("off")
             ax = axes[1]
         else:
-            _, ax = plt.subplots(figsize=(7, 7))
+            fig, ax = plt.subplots(figsize=(8, 8))
 
         ax.plot(-pts["y_m"], pts["x_m"], marker="o", linewidth=2.0, color="lime", label="Selected Prediction")
         x_values = [-float(y) for y in pts["y_m"].tolist()]
@@ -294,8 +308,14 @@ class DatabaseExplorer:
         ax.legend()
         ax.set_title(
             f"prediction_id={prediction_id} | frame_id={pred['frame_id']} | "
-            f"{pred['source']} #{pred['frame_number']}\nnav={pred['nav_command']}"
+            f"{pred['source']} #{pred['frame_number']}\ncommand={command_text}"
         )
+        if reasoning_text:
+            wrapped_reasoning = "\n".join(
+                textwrap.wrap(f"Reasoning: {reasoning_text}", width=125)
+            )
+            fig.subplots_adjust(bottom=0.18)
+            fig.text(0.05, 0.03, wrapped_reasoning, ha="left", va="bottom", fontsize=9)
         plt.show()
 
     def plot_latest_prediction(self):
