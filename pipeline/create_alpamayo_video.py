@@ -63,6 +63,15 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--output", default=None, help="Output filename or path. Default is in the route folder.")
     parser.add_argument("--raw-dir", default="raw", help="Raw camera directory name. Default: raw.")
+    parser.add_argument(
+        "--prediction-frames",
+        type=int,
+        default=None,
+        help=(
+            "Maximum number of stored future trajectory points to draw. "
+            "At the default dataset rate, 30 points is 3.0 seconds."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -226,7 +235,7 @@ def draw_polyline(panel: np.ndarray, points: list[tuple[int, int]], color: tuple
         cv2.circle(panel, point, 4, color, -1, cv2.LINE_AA)
 
 
-def draw_path_panel(frame: np.ndarray, payload: dict) -> None:
+def draw_path_panel(frame: np.ndarray, payload: dict, prediction_frames: int | None = None) -> None:
     height, width = frame.shape[:2]
     panel_w = min(380, max(280, width // 3))
     panel_h = min(340, max(260, height // 3))
@@ -248,6 +257,8 @@ def draw_path_panel(frame: np.ndarray, payload: dict) -> None:
 
     frames_stored = int(payload.get("frames_stored", len(payload.get("selected_path", []))))
     max_points = max(1, frames_stored)
+    if prediction_frames is not None:
+        max_points = min(max_points, max(1, prediction_frames))
     pred = path_points(payload.get("selected_path", []), max_points)
     gt = path_points(payload.get("ground_truth_path", []), max_points)
     all_points = pred + gt + [(0.0, 0.0)]
@@ -318,6 +329,9 @@ def default_output_path(route_dir: Path, segments: list[Path], args: argparse.Na
 
 
 def render_video(route_dir: Path, segments: list[Path], args: argparse.Namespace) -> Path:
+    if args.prediction_frames is not None and args.prediction_frames < 1:
+        raise SystemExit("[ERROR] --prediction-frames must be at least 1.")
+
     output_path = default_output_path(route_dir, segments, args)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -360,7 +374,7 @@ def render_video(route_dir: Path, segments: list[Path], args: argparse.Namespace
             payload = predictions[frame_index]
             label_path = label_path_for_frame(segment_dir, args.raw_dir, frame_index)
             draw_annotations(frame, label_path, classes)
-            draw_path_panel(frame, payload)
+            draw_path_panel(frame, payload, args.prediction_frames)
             draw_text_panel(frame, segment_dir.name, frame_index, payload)
 
             if writer is None:
